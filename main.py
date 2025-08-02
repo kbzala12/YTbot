@@ -1,63 +1,78 @@
-import telebot, sqlite3, os
+import telebot
+import sqlite3
+import os
+from flask import Flask, request
+from threading import Thread
 
+# ========== CONFIG ==========
 BOT_TOKEN = "8192810260:AAFfhjDfNywZIzkrlVmtAuKFL5_E-ZnsOmU"
+ADMIN_ID = 7459795138
 bot = telebot.TeleBot(BOT_TOKEN)
-DB_PATH = "database.db"
+app = Flask(__name__)
 
-# 📦 DB SETUP
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-cur = conn.cursor()
-cur.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0)''')
-conn.commit()
+# ========== DATABASE ==========
+def init_db():
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            points INTEGER DEFAULT 0,
+            referrals INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# 👋 START
+init_db()
+
+# ========== TELEGRAM HANDLERS ==========
 @bot.message_handler(commands=['start'])
-def send_welcome(message):
-    user_id = message.chat.id
-    cur.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
+def handle_start(message):
+    user_id = message.from_user.id
+
+    # Referral system
+    if len(message.text.split()) > 1:
+        ref_id = int(message.text.split()[1])
+        if ref_id != user_id:
+            add_points(ref_id, 50)
+            bot.send_message(ref_id, f"🎉 आपने एक नया रेफ़रल प्राप्त किया! +50 पॉइंट्स")
+
+    add_user(user_id)
+    bot.send_message(user_id, "🙏 स्वागत है! आपने बॉट शुरू किया है।\nहर वीडियो देखने पर 10 पॉइंट्स मिलेंगे।")
+
+# ========== DATABASE FUNCTIONS ==========
+def add_user(user_id):
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
     conn.commit()
+    conn.close()
 
-    photo = open("static/banner.jpg", 'rb')
-    bot.send_photo(user_id, photo, caption="""
-🎁 *स्वागत है!*
-आप इस बॉट से वीडियो देखकर, शेयर करके और रेफ़र करके पॉइंट्स कमा सकते हैं।
-
-🎥 /watch - वीडियो देखें
-🔗 /share - शेयर करें
-👥 /refer - रेफ़रल लिंक
-💰 /points - अपने पॉइंट्स देखें
-    """, parse_mode="Markdown")
-
-# 📺 वीडियो देखना
-@bot.message_handler(commands=['watch'])
-def watch_video(message):
-    user_id = message.chat.id
-    cur.execute("UPDATE users SET points = points + 10 WHERE id = ?", (user_id,))
+def add_points(user_id, points):
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("UPDATE users SET points = points + ? WHERE user_id = ?", (points, user_id))
     conn.commit()
-    bot.reply_to(message, "✅ आपने वीडियो देखा! +10 पॉइंट्स मिले।")
+    conn.close()
 
-# 🔗 शेयर करना
-@bot.message_handler(commands=['share'])
-def share_video(message):
-    user_id = message.chat.id
-    cur.execute("UPDATE users SET points = points + 25 WHERE id = ?", (user_id,))
-    conn.commit()
-    bot.reply_to(message, "✅ शेयर करने पर +25 पॉइंट्स मिले।")
+# ========== FLASK WEBHOOK ==========
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "!", 200
 
-# 🔁 रेफ़र सिस्टम
-@bot.message_handler(commands=['refer'])
-def refer_system(message):
-    user_id = message.chat.id
-    link = f"https://t.me/Hkzyt_bot?start={user_id}"
-    bot.reply_to(message, f"👥 अपना रेफ़रल लिंक:\n{link}")
+@app.route("/")
+def home():
+    return "Bot is running!", 200
 
-# 💰 पॉइंट्स चेक करना
-@bot.message_handler(commands=['points'])
-def check_points(message):
-    user_id = message.chat.id
-    cur.execute("SELECT points FROM users WHERE id = ?", (user_id,))
-    result = cur.fetchone()
-    points = result[0] if result else 0
-    bot.reply_to(message, f"💰 आपके कुल पॉइंट्स: {points}")
+# ========== THREAD TO RUN BOT LOCALLY TOO (SAFETY) ==========
+def run_bot():
+    bot.infinity_polling()
 
-bot.polling()
+if __name__ == "__main__":
+    Thread(target=run_bot).start()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
