@@ -141,7 +141,8 @@ def handle_all(message):
 
     elif text == "💰 Wallet":
         cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-        points = cur.fetchone()[0] if cur.fetchone() else 0
+        result = cur.fetchone()
+        points = result[0] if result else 0
         bot.reply_to(message, f"💵 आपके Wallet में पॉइंट्स: {points}")
 
     elif text == "🔗 Invite Friends":
@@ -171,7 +172,9 @@ def handle_link_submission(message):
     cur = conn.cursor()
 
     cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-    points = cur.fetchone()[0]
+    result = cur.fetchone()
+    points = result[0] if result else 0
+
     if points < LINK_SUBMIT_COST:
         bot.reply_to(message, f"⚠️ आपके पास पर्याप्त Coin नहीं हैं। {LINK_SUBMIT_COST} Coin चाहिए।")
         conn.close()
