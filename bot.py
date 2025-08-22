@@ -9,7 +9,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 DAILY_POINT_LIMIT = 100
 VIDEO_POINTS = 30
 REFERRAL_POINTS = 100
-BOT_USERNAME = "Kingyt1k_bot"   # ✅ अपना असली Bot Username
+BOT_USERNAME = "Bingyt_bot"   # ✅ अब invite लिंक के लिए नया bot username
 
 # 📂 Database Setup
 def init_db():
@@ -82,7 +82,8 @@ def start(message):
 
     markup = types.InlineKeyboardMarkup()
     web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
-    invite_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+    # ✅ Invite Link अब Bingyt_bot के साथ
+    invite_link = f"https://t.me/Bingyt_bot?start={user_id}"
     invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=invite_link)
     markup.add(web_btn, invite_btn)
 
@@ -106,7 +107,7 @@ def handle_all(message):
     if text == "📊 प्रोफाइल":
         cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
         points, dpoints = cur.fetchone()
-        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        ref_link = f"https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
         bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज आपने {dpoints}/{DAILY_POINT_LIMIT} पॉइंट्स कमाए।\n\n🔗 आपका Referral Link:\n{ref_link}")
 
     elif text == "🎁 पॉइंट्स पाओ":
