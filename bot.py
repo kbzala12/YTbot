@@ -1,103 +1,108 @@
-import telebot
-from telebot import types
-from config import BOT_TOKEN, ADMIN_ID, WEB_URL
+import logging
+import sqlite3
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# =========================
+# 🔑 Config
+# =========================
+BOT_TOKEN = "7978191312:AAFyWVkBruuR42HTuTd_sQxFaKHBrre0VWw"
+ADMIN_ID = 7459795138
+WEB_URL = "https://studiokbyt.onrender.com/"
+BOT_USERNAME = "Kingyt1k_bot"
 
-# 🗂 User Data (Memory)
-users = {}
-video_count = {}  # daily video count
-referrals = {}    # referral tracking
+# =========================
+# 📂 Database Init
+# =========================
+def init_db():
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+                 user_id INTEGER PRIMARY KEY,
+                 coins INTEGER DEFAULT 0,
+                 referrer_id INTEGER)""")
+    conn.commit()
+    conn.close()
 
-DAILY_VIDEO_LIMIT = 50
-VIDEO_POINTS = 30
-REFERRAL_POINTS = 100
+init_db()
 
-# 🛠 Check & Create User
-def check_user(user_id, ref_id=None):
-    if user_id not in users:
-        # Referral से आए नए user को 100 पॉइंट्स
-        initial_points = REFERRAL_POINTS if ref_id and ref_id in users else 0
-        users[user_id] = {"points": initial_points}
-        video_count[user_id] = 0
+# =========================
+# 🟢 Start Command
+# =========================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
 
-        # Referral देने वाले को भी 100 पॉइंट्स
-        if ref_id and ref_id in users:
-            users[ref_id]["points"] += REFERRAL_POINTS
-            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} पॉइंट्स मिले।")
+    # referral check
+    ref_id = None
+    if context.args:
+        try:
+            ref_id = int(context.args[0])
+        except:
+            pass
 
-        # Referral track
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    user_data = c.fetchone()
+
+    if not user_data:
+        # नया यूज़र add
+        c.execute("INSERT INTO users (user_id, coins, referrer_id) VALUES (?, ?, ?)", (user_id, 0, ref_id))
+        conn.commit()
+
         if ref_id:
-            referrals[user_id] = ref_id
+            # रेफ़र करने वाले को 100 coins
+            c.execute("UPDATE users SET coins = coins + 100 WHERE user_id=?", (ref_id,))
+            conn.commit()
 
-# 🎬 /start Command
-@bot.message_handler(commands=["start"])
-def start(message):
-    user_id = message.from_user.id
-    args = message.text.split()
-    ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None  # /start <ref_id>
-    
-    check_user(user_id, ref_id)
+    conn.close()
 
-    # 👋 Welcome Message
-    welcome_text = f"""
-🎬 Video Coin Earner Bot में आपका स्वागत है! 🎬
+    # Buttons
+    buttons = [
+        [InlineKeyboardButton("🚀 Web Open", web_app=WebAppInfo(WEB_URL))],
+        [InlineKeyboardButton("👥 Invite", url=f"https://t.me/{BOT_USERNAME}?start={user_id}")],
+        [InlineKeyboardButton("💰 Wallet", callback_data="wallet")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
 
-नमस्ते {message.from_user.first_name}!
+    await update.message.reply_text(
+        f"🎬 *Video Coin Earner Bot* में आपका स्वागत है {user.first_name}!\n\n"
+        "📹 वीडियो देखो और कॉइन कमाओ\n"
+        "👥 दोस्तों को Invite करके Extra कमाओ\n"
+        "💰 Wallet में अपना Balance देखो\n\n"
+        "👉 YouTube चैनल Monetization का असली रास्ता 🚀",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
 
-📹 वीडियो देखें और कॉइन कमाएं:
-• प्रत्येक वीडियो = {VIDEO_POINTS} पॉइंट्स  
-• दैनिक लिमिट = {DAILY_VIDEO_LIMIT} वीडियो  
+# =========================
+# 💰 Wallet Handler
+# =========================
+async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
 
-👥 रेफरल सिस्टम:  
-• दोस्तों को इनवाइट करें  
-• हर नए यूज़र पर {REFERRAL_POINTS} पॉइंट्स  
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT coins FROM users WHERE user_id=?", (user_id,))
+    result = c.fetchone()
+    conn.close()
 
-⚠️ महत्वपूर्ण: बॉट यूज़ करने के लिए पहले ग्रुप जॉइन करना ज़रूरी है।  
+    balance = result[0] if result else 0
+    await query.answer()
+    await query.edit_message_text(f"👤 आपका Wallet Balance: *{balance} coins*", parse_mode="Markdown")
 
-आपका ID: {user_id}
-"""
+# =========================
+# Run Bot
+# =========================
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    # Inline Buttons: Web Open + Invite
-    markup = types.InlineKeyboardMarkup()
-    web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
-    invite_link = f"https://t.me/YourBotUsername?start={user_id}"
-    invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=invite_link)
-    markup.add(web_btn, invite_btn)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(wallet, pattern="wallet"))
 
-    # Send welcome message with buttons
-    bot.send_message(user_id, welcome_text, reply_markup=markup)
+    app.run_polling()
 
-    # ReplyKeyboard for Wallet & Profile
-    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
-    menu.row("💰 Wallet")
-    bot.send_message(user_id, "नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
-
-# 🔘 Menu Handler
-@bot.message_handler(func=lambda msg: True)
-def handle_all(message):
-    user_id = message.from_user.id
-    check_user(user_id)
-    text = message.text
-
-    if text == "📊 प्रोफाइल":
-        bot.reply_to(message, f"👤 आपके पॉइंट्स: {users[user_id]['points']}")
-    elif text == "🎁 पॉइंट्स पाओ":
-        # Video points with daily limit
-        if video_count[user_id] < DAILY_VIDEO_LIMIT:
-            users[user_id]["points"] += VIDEO_POINTS
-            video_count[user_id] += 1
-            bot.reply_to(message, f"✅ आपको {VIDEO_POINTS} पॉइंट्स मिले! ({video_count[user_id]}/{DAILY_VIDEO_LIMIT} आज)")
-        else:
-            bot.reply_to(message, f"⚠️ आज की वीडियो लिमिट पूरी हो गई है। कल फिर कोशिश करें!")
-    elif text == "💰 Wallet":
-        bot.reply_to(message, f"💵 आपके Wallet में पॉइंट्स: {users[user_id]['points']}")
-    elif text == "👑 Admin":
-        if user_id == ADMIN_ID:
-            bot.reply_to(message, "✅ आप Admin हैं!")
-        else:
-            bot.reply_to(message, "⛔ यह फीचर सिर्फ़ Admin के लिए है।")
-
-# ♾ Bot Run
-bot.infinity_polling()
+if __name__ == "__main__":
+    main()
