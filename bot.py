@@ -92,7 +92,7 @@ def start(message):
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
     menu.row("💰 Wallet", "🔗 Invite Friends")
-    menu.row("💻 Submit YouTube Link")  # ✅ Submit button
+    menu.row("💻 Submit YouTube Link")
     bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
 # Handle messages
@@ -125,7 +125,8 @@ def handle_all(message):
 
     elif text == "💰 Wallet":
         cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-        points = cur.fetchone()[0] if cur.fetchone() else 0
+        result = cur.fetchone()
+        points = result[0] if result else 0
         bot.reply_to(message, f"💵 आपके Wallet में पॉइंट्स: {points}")
 
     elif text == "🔗 Invite Friends":
@@ -153,7 +154,8 @@ def handle_link_submission(message):
 
     # Check if user has enough points
     cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-    points = cur.fetchone()[0]
+    result = cur.fetchone()
+    points = result[0] if result else 0
     if points < LINK_SUBMIT_COST:
         bot.reply_to(message, f"⚠️ आपके पास पर्याप्त Coin नहीं हैं। {LINK_SUBMIT_COST} Coin चाहिए।")
         conn.close()
@@ -166,8 +168,8 @@ def handle_link_submission(message):
     conn.commit()
     conn.close()
 
-    bot.reply_to(message, f"✅ आपका link submit हो गया है! 1200 Coin कट गए। Admin approval का इंतजार करें।")
-    bot.send_message(ADMIN_ID, f"🆕 नया YouTube link submit हुआ:\nUser: {user_id}\nURL: {url}\n💰 1200 Coin deducted")
+    bot.reply_to(message, f"✅ आपका link submit हो गया है! {LINK_SUBMIT_COST} Coin कट गए। Admin approval का इंतजार करें।")
+    bot.send_message(ADMIN_ID, f"🆕 नया YouTube link submit हुआ:\nUser: {user_id}\nURL: {url}\n💰 {LINK_SUBMIT_COST} Coin deducted")
 
 # Admin command to view pending links
 @bot.message_handler(commands=['links'])
