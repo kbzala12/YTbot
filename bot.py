@@ -2,20 +2,34 @@ import telebot
 from telebot import types
 import sqlite3
 from config import BOT_TOKEN, ADMIN_ID, WEB_URL
+from flask import Flask
+from threading import Thread
 
+# -------------------- Flask server --------------------
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8080)
+
+# -------------------- Telegram Bot --------------------
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Config
+# -------------------- Config --------------------
 DAILY_POINT_LIMIT = 100
 VIDEO_POINTS = 30
 REFERRAL_POINTS = 100
+LINK_SUBMIT_COST = 1200
 BOT_USERNAME = "Bingyt_bot"
-LINK_SUBMIT_COST = 1200  # Coin per YouTube URL submission
 
-# Database setup
+# -------------------- Database setup --------------------
 def init_db():
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
+    # Users table
     cur.execute('''CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         points INTEGER DEFAULT 0,
@@ -23,6 +37,7 @@ def init_db():
         daily_points INTEGER DEFAULT 0,
         ref_id INTEGER
     )''')
+    # Submitted links table
     cur.execute('''CREATE TABLE IF NOT EXISTS submitted_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -35,7 +50,7 @@ def init_db():
 
 init_db()
 
-# User check
+# -------------------- User check --------------------
 def check_user(user_id, ref_id=None):
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
@@ -53,7 +68,7 @@ def check_user(user_id, ref_id=None):
             bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} पॉइंट्स मिले।")
     conn.close()
 
-# /start command
+# -------------------- /start command --------------------
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
@@ -83,19 +98,20 @@ def start(message):
 आपका ID: {user_id}
 """
 
-    markup = types.InlineKeyboardMarkup()
-    web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
-    markup.add(web_btn)
+    # Inline keyboard for WebApp
+    markup_inline = types.InlineKeyboardMarkup()
+    web_btn_inline = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
+    markup_inline.add(web_btn_inline)
+    bot.send_message(user_id, welcome_text, reply_markup=markup_inline)
 
-    bot.send_message(user_id, welcome_text, reply_markup=markup)
-
+    # Reply keyboard
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
     menu.row("💰 Wallet", "🔗 Invite Friends")
-    menu.row("💻 Submit YouTube Link")  # ✅ Submit button
+    menu.row("💻 Submit YouTube Link", "🚀 Open WebApp")  # ✅ WebApp button
     bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
-# Handle messages
+# -------------------- Handle messages --------------------
 @bot.message_handler(func=lambda msg: True)
 def handle_all(message):
     user_id = message.from_user.id
@@ -133,7 +149,7 @@ def handle_all(message):
         bot.reply_to(message, f"अपने दोस्तों को invite करें और {REFERRAL_POINTS} पॉइंट्स पाएं:\n{invite_link}")
 
     elif text == "💻 Submit YouTube Link":
-        bot.send_message(user_id, "अपना YouTube link भेजें। 1200 Coin कटेंगे।")
+        bot.send_message(user_id, f"अपना YouTube link भेजें। {LINK_SUBMIT_COST} Coin कटेंगे।")
         bot.register_next_step_handler(message, handle_link_submission)
 
     elif text == "👑 Admin":
@@ -142,16 +158,18 @@ def handle_all(message):
         else:
             bot.send_message(user_id, "⛔ यह फीचर सिर्फ़ Admin के लिए है।")
 
+    elif text == "🚀 Open WebApp":
+        bot.send_message(user_id, f"यहाँ क्लिक करें: {WEB_URL}")
+
     conn.close()
 
-# Handle link submission
+# -------------------- Handle link submission --------------------
 def handle_link_submission(message):
     user_id = message.from_user.id
     url = message.text.strip()
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
 
-    # Check if user has enough points
     cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
     points = cur.fetchone()[0]
     if points < LINK_SUBMIT_COST:
@@ -161,15 +179,15 @@ def handle_link_submission(message):
 
     # Deduct points
     cur.execute("UPDATE users SET points = points - ? WHERE user_id=?", (LINK_SUBMIT_COST, user_id))
-    # Insert link into submitted_links
+    # Insert link
     cur.execute("INSERT INTO submitted_links (user_id, url) VALUES (?, ?)", (user_id, url))
     conn.commit()
     conn.close()
 
-    bot.reply_to(message, f"✅ आपका link submit हो गया है! 1200 Coin कट गए। Admin approval का इंतजार करें।")
-    bot.send_message(ADMIN_ID, f"🆕 नया YouTube link submit हुआ:\nUser: {user_id}\nURL: {url}\n💰 1200 Coin deducted")
+    bot.reply_to(message, f"✅ आपका link submit हो गया है! {LINK_SUBMIT_COST} Coin कट गए। Admin approval का इंतजार करें।")
+    bot.send_message(ADMIN_ID, f"🆕 नया YouTube link submit हुआ:\nUser: {user_id}\nURL: {url}\n💰 {LINK_SUBMIT_COST} Coin deducted")
 
-# Admin command to view pending links
+# -------------------- Admin command to view pending links --------------------
 @bot.message_handler(commands=['links'])
 def admin_links(message):
     if message.from_user.id != ADMIN_ID:
@@ -189,4 +207,6 @@ def admin_links(message):
         bot.reply_to(message, text)
     conn.close()
 
+# -------------------- Run Flask server + Bot --------------------
+Thread(target=run_flask).start()
 bot.infinity_polling()
