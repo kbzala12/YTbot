@@ -107,7 +107,7 @@ def handle_all(message):
     if text == "📊 प्रोफाइल":
         cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
         points, dpoints = cur.fetchone()
-        ref_link = f"https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
+        ref_link = "https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
         bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज आपने {dpoints}/{DAILY_POINT_LIMIT} पॉइंट्स कमाए।\n\n🔗 आपका Referral Link:\n{ref_link}")
 
     elif text == "🎁 पॉइंट्स पाओ":
