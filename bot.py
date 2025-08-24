@@ -1,176 +1,141 @@
-import telebot, sqlite3
+import telebot
 from telebot import types
-from config import *
-from keep_alive import keep_alive
+import sqlite3
+from config import BOT_TOKEN, ADMIN_ID, WEB_URL
 
-# ========== KEEP ALIVE ==========
-keep_alive()
-
-# ========== DB SETUP ==========
-conn = sqlite3.connect("bot.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    points INTEGER DEFAULT 0,
-    videos INTEGER DEFAULT 0,
-    shares INTEGER DEFAULT 0,
-    ref INTEGER DEFAULT 0,
-    referred_by TEXT
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS redemptions (
-    id TEXT,
-    code TEXT,
-    UNIQUE(id, code)
-)
-""")
-conn.commit()
-
-# ========== FUNCTIONS ==========
-def check_user(user_id):
-    cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
-    if not cursor.fetchone():
-        cursor.execute("INSERT INTO users (id) VALUES (?)", (user_id,))
-        conn.commit()
-
-def get_user(user_id):
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    row = cursor.fetchone()
-    return {"id": row[0], "points": row[1], "videos": row[2], "shares": row[3], "ref": row[4], "referred_by": row[5]} if row else None
-
-def add_points(user_id, field, max_limit, increment, points):
-    cursor.execute(f"SELECT {field}, points FROM users WHERE id = ?", (user_id,))
-    row = cursor.fetchone()
-    if row and row[0] < max_limit:
-        cursor.execute(f"UPDATE users SET {field} = {field} + ?, points = points + ? WHERE id = ?", (increment, points, user_id))
-        conn.commit()
-        return True
-    return False
-
-def apply_referral(new_user_id, ref_id):
-    if new_user_id == ref_id: return
-    user = get_user(new_user_id)
-    if user["referred_by"]: return
-    if get_user(ref_id):
-        cursor.execute("UPDATE users SET ref = ref + 1, points = points + 50 WHERE id = ?", (ref_id,))
-        cursor.execute("UPDATE users SET referred_by = ? WHERE id = ?", (ref_id, new_user_id))
-        conn.commit()
-
-# ========== TELEGRAM BOT ==========
 bot = telebot.TeleBot(BOT_TOKEN)
 
-def is_user_in_channel(user_id):
-    try:
-        member = bot.get_chat_member(TELEGRAM_GROUP, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        print(f"Error: {e}")
-        return False
+# 🎥 Config
+DAILY_POINT_LIMIT = 100
+VIDEO_POINTS = 30
+REFERRAL_POINTS = 100
+BOT_USERNAME = "Bingyt_bot"   # ✅ अब invite लिंक के लिए नया bot username
 
-def main_menu():
-    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    menu.row("🎥 वीडियो देखा", "📤 शेयर किया")
-    menu.row("📊 मेरी जानकारी", "🔗 रेफरल लिंक")
-    menu.row("🎯 प्रमोशन सबमिट")
-    return menu
+# 📂 Database Setup
+def init_db():
+    conn = sqlite3.connect("bot_data.db")
+    cur = conn.cursor()
+    cur.execute('''CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        points INTEGER DEFAULT 0,
+        video_count INTEGER DEFAULT 0,
+        daily_points INTEGER DEFAULT 0,
+        ref_id INTEGER
+    )''')
+    conn.commit()
+    conn.close()
 
+init_db()
+
+# 📌 User check & create
+def check_user(user_id, ref_id=None):
+    conn = sqlite3.connect("bot_data.db")
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    user = cur.fetchone()
+
+    if not user:
+        initial_points = REFERRAL_POINTS if ref_id else 0
+        cur.execute("INSERT INTO users (user_id, points, video_count, daily_points, ref_id) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, initial_points, 0, initial_points, ref_id))
+        conn.commit()
+
+        # Referrer को points देना
+        if ref_id:
+            cur.execute("UPDATE users SET points = points + ?, daily_points = daily_points + ? WHERE user_id=?",
+                        (REFERRAL_POINTS, REFERRAL_POINTS, ref_id))
+            conn.commit()
+            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} पॉइंट्स मिले।")
+
+    conn.close()
+
+# 🎬 /start Command
 @bot.message_handler(commands=["start"])
 def start(message):
-    user_id = str(message.from_user.id)
+    user_id = message.from_user.id
+    args = message.text.split()
+    ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
+    
+    check_user(user_id, ref_id)
 
-    if not is_user_in_channel(user_id):
-        join_btn = types.InlineKeyboardMarkup()
-        join_btn.add(types.InlineKeyboardButton("📥 ग्रुप जॉइन करें", url=f"https://t.me/{TELEGRAM_GROUP.replace('@', '')}"))
-        bot.send_message(message.chat.id, "🚫 पहले हमारे Telegram Group को जॉइन करें:", reply_markup=join_btn)
-        return
+    welcome_text = f"""
+🎬 Video Coin Earner Bot में आपका स्वागत है! 🎬
 
-    check_user(user_id)
+नमस्ते {message.from_user.first_name}!
 
-    if len(message.text.split()) > 1:
-        ref_id = message.text.split()[1]
-        apply_referral(user_id, ref_id)
+📹 वीडियो देखो, कॉइन कमाओ और  
+💰 अपना YouTube चैनल मोनेटाइजेशन करवाओ ✅  
 
-    bot.send_message(message.chat.id,
-        f"👋 BoomUp Bot में आपका स्वागत है!\n\n🎥 Video = 10 pts\n📤 Share = 25 pts\n🔗 Referral = 50 pts\n🎯 Promotion = 1000 pts\n\n📺 {YOUTUBE_CHANNEL}\n💬 {TELEGRAM_GROUP}",
-        reply_markup=main_menu())
+📌 कमाई नियम:
+• प्रत्येक वीडियो = {VIDEO_POINTS} पॉइंट्स  
+• दैनिक लिमिट = {DAILY_POINT_LIMIT} पॉइंट्स  
 
+👥 रेफरल सिस्टम:  
+• दोस्तों को इनवाइट करें  
+• हर नए यूज़र पर {REFERRAL_POINTS} पॉइंट्स  
+
+⚠️ महत्वपूर्ण: बॉट यूज़ करने के लिए पहले ग्रुप जॉइन करना ज़रूरी है।  
+
+आपका ID: {user_id}
+"""
+
+    markup = types.InlineKeyboardMarkup()
+    web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
+    # ✅ Invite Link अब Bingyt_bot के साथ
+    invite_link = f"https://t.me/Bingyt_bot?start={user_id}"
+    invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=invite_link)
+    markup.add(web_btn, invite_btn)
+
+    bot.send_message(user_id, welcome_text, reply_markup=markup)
+
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
+    menu.row("💰 Wallet")
+    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
+
+# 🔘 Menu Handler
 @bot.message_handler(func=lambda msg: True)
 def handle_all(message):
-    user_id = str(message.from_user.id)
+    user_id = message.from_user.id
     check_user(user_id)
     text = message.text
 
-    if text == "🎥 वीडियो देखा":
-        msg = "🎥 इन वीडियो को देखो और अंत में दिए गए कोड को भेजो:\n\n"
-        for code, link in VIDEO_CODES.items():
-            msg += f"🔗 {link}\n"
-        msg += "\n🔑 कोड मिलने पर मुझे भेजो (जैसे: boom123)"
-        bot.reply_to(message, msg)
+    conn = sqlite3.connect("bot_data.db")
+    cur = conn.cursor()
 
-    elif text == "📤 शेयर किया":
-        if add_points(user_id, "shares", 5, 1, 25):
-            bot.reply_to(message, "✅ शेयर करने के लिए धन्यवाद, +25 पॉइंट्स!")
+    if text == "📊 प्रोफाइल":
+        cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
+        points, dpoints = cur.fetchone()
+        ref_link = f"https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
+        bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज आपने {dpoints}/{DAILY_POINT_LIMIT} पॉइंट्स कमाए।\n\n🔗 आपका Referral Link:\n{ref_link}")
+
+    elif text == "🎁 पॉइंट्स पाओ":
+        cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
+        points, dpoints = cur.fetchone()
+
+        if dpoints + VIDEO_POINTS <= DAILY_POINT_LIMIT:
+            new_points = points + VIDEO_POINTS
+            new_dpoints = dpoints + VIDEO_POINTS
+            cur.execute("UPDATE users SET points=?, daily_points=? WHERE user_id=?", 
+                        (new_points, new_dpoints, user_id))
+            conn.commit()
+            bot.reply_to(message, f"✅ आपको {VIDEO_POINTS} पॉइंट्स मिले! (आज {new_dpoints}/{DAILY_POINT_LIMIT})")
         else:
-            bot.reply_to(message, "❌ आपने 5 शेयर की लिमिट पूरी कर ली है।")
+            bot.reply_to(message, "⚠️ आज की पॉइंट्स लिमिट पूरी हो गई है। कल फिर कोशिश करें!")
 
-    elif text == "📊 मेरी जानकारी":
-        u = get_user(user_id)
-        bot.reply_to(message, f"""📊 आपकी जानकारी:
-Total Points: {u['points']}
-🎥 Videos: {u['videos']}/10
-📤 Shares: {u['shares']}/5
-🔗 Referrals: {u['ref']}""")
+    elif text == "💰 Wallet":
+        cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
+        points = cur.fetchone()[0]
+        bot.reply_to(message, f"💵 आपके Wallet में पॉइंट्स: {points}")
 
-    elif text == "🔗 रेफरल लिंक":
-        bot.reply_to(message, f"🔗 आपका रेफरल लिंक:\nhttps://t.me/Hkzyt_bot?start={user_id}")
-
-    elif text == "🎯 प्रमोशन सबमिट":
-        u = get_user(user_id)
-        if u['points'] >= 1000:
-            bot.reply_to(message, "✅ कृपया अपना प्रमोशन लिंक भेजें:")
+    elif text == "👑 Admin":
+        if user_id == ADMIN_ID:
+            bot.reply_to(message, "✅ आप Admin हैं!")
         else:
-            bot.reply_to(message, "❌ प्रमोशन के लिए 1000 पॉइंट्स ज़रूरी हैं।")
+            bot.reply_to(message, "⛔ यह फीचर सिर्फ़ Admin के लिए है।")
 
-@bot.message_handler(func=lambda m: m.text.lower() in VIDEO_CODES)
-def handle_secret_code(message):
-    user_id = str(message.from_user.id)
-    code = message.text.lower()
+    conn.close()
 
-    cursor.execute("SELECT id FROM redemptions WHERE id = ? AND code = ?", (user_id, code))
-    if cursor.fetchone():
-        bot.reply_to(message, "⚠️ आपने ये कोड पहले ही इस्तेमाल किया है।")
-        return
-
-    if add_points(user_id, "videos", 10, 1, 10):
-        cursor.execute("INSERT INTO redemptions (id, code) VALUES (?, ?)", (user_id, code))
-        conn.commit()
-        bot.reply_to(message, "✅ सही कोड! आपको 10 पॉइंट्स मिले 🎉")
-    else:
-        bot.reply_to(message, "⚠️ आपने पहले ही 10 वीडियो पूरे कर लिए हैं।")
-
-@bot.message_handler(content_types=['text'])
-def promotion_handler(message):
-    user_id = str(message.from_user.id)
-    u = get_user(user_id)
-    if u and u['points'] >= 1000 and message.text.startswith("http"):
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton("✅ Approve", callback_data=f"approve:{user_id}"),
-            types.InlineKeyboardButton("❌ Reject", callback_data=f"reject:{user_id}")
-        )
-        bot.send_message(ADMIN_ID, f"📣 User {user_id} sent a promo:\n{message.text}", reply_markup=markup)
-        bot.reply_to(message, "📤 आपका लिंक भेज दिया गया है। 12 घंटे में रिव्यू होगा।")
-
-@bot.callback_query_handler(func=lambda call: True)
-def handle_callback(call):
-    action, user_id = call.data.split(":")
-    if action == "approve":
-        bot.send_message(user_id, "✅ आपका लिंक अप्रूव हो गया है! 3 दिन तक लाइव रहेगा.")
-    elif action == "reject":
-        bot.send_message(user_id, "❌ आपका प्रमोशन लिंक reject कर दिया गया है.")
-    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-
-print("🤖 Bot is running...")
+# ♾ Bot Run
 bot.infinity_polling()
