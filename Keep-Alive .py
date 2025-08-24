@@ -1,22 +1,19 @@
 from flask import Flask
-import threading
-import telebot
+from threading import Thread
 
-from config import BOT_TOKEN, WEB_URL  # WEB_URL same as app URL
+app = Flask('')
 
-app = Flask(__name__)
-bot = telebot.TeleBot(BOT_TOKEN)
-
-@app.route("/")
+@app.route('/')
 def home():
-    return "WebApp is running!"
+    return "Bot is Running!"
 
-def run_flask():
-    app.run(host="0.0.0.0", port=5000)
+def run():
+    app.run(host='0.0.0.0', port=8080)
 
-def run_bot():
-    bot.polling(none_stop=True)
+def keep_alive():
+    Thread(target=run).start()
 
-if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    run_bot()
+requirements.txt:
+
+pyTelegramBotAPI
+flask
