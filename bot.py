@@ -1,22 +1,25 @@
 import telebot
 from telebot import types
 import sqlite3
-import datetime
-from config import *
-from keep_alive import keep_alive
+from config import BOT_TOKEN, ADMIN_ID, WEB_URL
 
 bot = telebot.TeleBot(BOT_TOKEN)
-keep_alive()  # Optional for 24/7
 
-# Database Init
+# 🎥 Config
+DAILY_POINT_LIMIT = 100
+VIDEO_POINTS = 30
+REFERRAL_POINTS = 100
+BOT_USERNAME = "Bingyt_bot"   # ✅ अब invite लिंक के लिए नया bot username
+
+# 📂 Database Setup
 def init_db():
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
     cur.execute('''CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         points INTEGER DEFAULT 0,
+        video_count INTEGER DEFAULT 0,
         daily_points INTEGER DEFAULT 0,
-        last_active TEXT,
         ref_id INTEGER
     )''')
     conn.commit()
@@ -24,107 +27,115 @@ def init_db():
 
 init_db()
 
-# User check & referral
+# 📌 User check & create
 def check_user(user_id, ref_id=None):
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
-    today = datetime.date.today().isoformat()
 
     cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     user = cur.fetchone()
 
     if not user:
-        cur.execute("INSERT INTO users (user_id, points, daily_points, last_active, ref_id) VALUES (?, ?, ?, ?, ?)",
-                    (user_id, 0, 0, today, ref_id))
+        initial_points = REFERRAL_POINTS if ref_id else 0
+        cur.execute("INSERT INTO users (user_id, points, video_count, daily_points, ref_id) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, initial_points, 0, initial_points, ref_id))
         conn.commit()
-        if ref_id and ref_id != user_id:
+
+        # Referrer को points देना
+        if ref_id:
             cur.execute("UPDATE users SET points = points + ?, daily_points = daily_points + ? WHERE user_id=?",
                         (REFERRAL_POINTS, REFERRAL_POINTS, ref_id))
             conn.commit()
-            bot.send_message(ref_id, f"🎉 आपके referral से नया यूज़र जुड़ा! आपको {REFERRAL_POINTS} कॉइन मिले।")
-    else:
-        last_active = user[3]
-        if last_active != today:
-            cur.execute("UPDATE users SET daily_points=?, last_active=? WHERE user_id=?", (0, today, user_id))
-            conn.commit()
+            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} पॉइंट्स मिले।")
+
     conn.close()
 
-# /start Command
+# 🎬 /start Command
 @bot.message_handler(commands=["start"])
 def start(message):
     user_id = message.from_user.id
     args = message.text.split()
     ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
+    
     check_user(user_id, ref_id)
 
     welcome_text = f"""
-🎉 नमस्ते {message.from_user.first_name}!
-🚀 WebApp खोलें, ग्रुप जॉइन करें, और दोस्तों को इनवाइट करें।
+🎬 Video Coin Earner Bot में आपका स्वागत है! 🎬
+
+नमस्ते {message.from_user.first_name}!
+
+📹 वीडियो देखो, कॉइन कमाओ और  
+💰 अपना YouTube चैनल मोनेटाइजेशन करवाओ ✅  
+
+📌 कमाई नियम:
+• प्रत्येक वीडियो = {VIDEO_POINTS} पॉइंट्स  
+• दैनिक लिमिट = {DAILY_POINT_LIMIT} पॉइंट्स  
+
+👥 रेफरल सिस्टम:  
+• दोस्तों को इनवाइट करें  
+• हर नए यूज़र पर {REFERRAL_POINTS} पॉइंट्स  
+
+⚠️ महत्वपूर्ण: बॉट यूज़ करने के लिए पहले ग्रुप जॉइन करना ज़रूरी है।  
+
+आपका ID: {user_id}
 """
+
     markup = types.InlineKeyboardMarkup()
-    web_btn = types.InlineKeyboardButton("🚀 Open WebApp", url=WEB_URL)
-    group_btn = types.InlineKeyboardButton("📌 Join Group", url="https://t.me/boomupbot10")
-    invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=f"https://t.me/{BOT_USERNAME}?start={user_id}")
-    markup.add(web_btn, group_btn, invite_btn)
+    web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
+    # ✅ Invite Link अब Bingyt_bot के साथ
+    invite_link = f"https://t.me/Bingyt_bot?start={user_id}"
+    invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=invite_link)
+    markup.add(web_btn, invite_btn)
+
     bot.send_message(user_id, welcome_text, reply_markup=markup)
 
-    # Menu
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    menu.row("📊 Profile", "💰 Wallet")
-    menu.row("🔗 Invite Friends", "📤 URL Submit")
-    bot.send_message(user_id, "👇 नीचे बटन से आगे बढ़ें:", reply_markup=menu)
+    menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
+    menu.row("💰 Wallet")
+    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
-# Menu handler
+# 🔘 Menu Handler
 @bot.message_handler(func=lambda msg: True)
-def handle_menu(message):
+def handle_all(message):
     user_id = message.from_user.id
+    check_user(user_id)
     text = message.text
+
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
 
-    if text == "📊 Profile":
+    if text == "📊 प्रोफाइल":
         cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
         points, dpoints = cur.fetchone()
-        bot.send_message(user_id, f"👤 Points: {points}\n📅 Daily Earned: {dpoints}")
+        ref_link = f"https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
+        bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज आपने {dpoints}/{DAILY_POINT_LIMIT} पॉइंट्स कमाए।\n\n🔗 आपका Referral Link:\n{ref_link}")
+
+    elif text == "🎁 पॉइंट्स पाओ":
+        cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
+        points, dpoints = cur.fetchone()
+
+        if dpoints + VIDEO_POINTS <= DAILY_POINT_LIMIT:
+            new_points = points + VIDEO_POINTS
+            new_dpoints = dpoints + VIDEO_POINTS
+            cur.execute("UPDATE users SET points=?, daily_points=? WHERE user_id=?", 
+                        (new_points, new_dpoints, user_id))
+            conn.commit()
+            bot.reply_to(message, f"✅ आपको {VIDEO_POINTS} पॉइंट्स मिले! (आज {new_dpoints}/{DAILY_POINT_LIMIT})")
+        else:
+            bot.reply_to(message, "⚠️ आज की पॉइंट्स लिमिट पूरी हो गई है। कल फिर कोशिश करें!")
 
     elif text == "💰 Wallet":
         cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
         points = cur.fetchone()[0]
-        bot.send_message(user_id, f"💵 Wallet Balance: {points} कॉइन")
+        bot.reply_to(message, f"💵 आपके Wallet में पॉइंट्स: {points}")
 
-    elif text == "🔗 Invite Friends":
-        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        bot.send_message(user_id, f"👥 अपने दोस्तों को इनवाइट करें!\nReferral Link:\n{ref_link}\n100 कॉइन मिलेंगे ✅")
-
-    elif text == "📤 URL Submit":
-        cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-        points = cur.fetchone()[0]
-        if points >= LINK_SUBMIT_COST:
-            bot.send_message(user_id, "📌 YouTube URL भेजें:")
-            bot.register_next_step_handler(message, process_url)
+    elif text == "👑 Admin":
+        if user_id == ADMIN_ID:
+            bot.reply_to(message, "✅ आप Admin हैं!")
         else:
-            bot.send_message(user_id, f"⚠️ {LINK_SUBMIT_COST} कॉइन चाहिए। आपके पास: {points}")
+            bot.reply_to(message, "⛔ यह फीचर सिर्फ़ Admin के लिए है।")
 
     conn.close()
 
-# URL submit
-def process_url(message):
-    user_id = message.from_user.id
-    url = message.text
-    conn = sqlite3.connect("bot_data.db")
-    cur = conn.cursor()
-    cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
-    points = cur.fetchone()[0]
-
-    if points >= LINK_SUBMIT_COST:
-        new_points = points - LINK_SUBMIT_COST
-        cur.execute("UPDATE users SET points=? WHERE user_id=?", (new_points, user_id))
-        conn.commit()
-        bot.send_message(user_id, f"✅ आपका URL submit हो गया, {LINK_SUBMIT_COST} कॉइन कटे।")
-        bot.send_message(ADMIN_ID, f"📩 New URL Submission\nUser ID: {user_id}\nURL: {url}\nCost: {LINK_SUBMIT_COST} कॉइन")
-    else:
-        bot.send_message(user_id, "⚠️ पर्याप्त कॉइन नहीं।")
-    conn.close()
-
-# Run Bot
+# ♾ Bot Run
 bot.infinity_polling()
