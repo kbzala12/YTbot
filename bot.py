@@ -2,17 +2,20 @@ import telebot
 from telebot import types
 import sqlite3
 import datetime
-from config import BOT_TOKEN, ADMIN_ID, WEB_URL, VIP_YT_CHANNEL
+from config import BOT_TOKEN, ADMIN_ID, WEB_URL, VIP_YT_CHANNEL, BOT_USERNAME
+from keep_alive import keep_alive
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # 🎥 Config
 DAILY_POINT_LIMIT = 100
 VIDEO_POINTS = 30
-REFERRAL_POINTS = 100   # हर नए यूज़र पर 100 कॉइन
-LINK_SUBMIT_COST = 1280 # URL Submit Cost
-SUBSCRIBE_POINTS = 10   # Subscribe करने पर मिलने वाले पॉइंट्स
-BOT_USERNAME = "Bingyt_bot"
+REFERRAL_POINTS = 100
+LINK_SUBMIT_COST = 1280
+SUBSCRIBE_POINTS = 10
+
+# ♾ Keep bot alive
+keep_alive()
 
 # 📂 Database Setup
 def init_db():
@@ -35,7 +38,6 @@ init_db()
 def check_user(user_id, ref_id=None):
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
-
     today = datetime.date.today().isoformat()
 
     cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
@@ -45,23 +47,17 @@ def check_user(user_id, ref_id=None):
         cur.execute("INSERT INTO users (user_id, points, video_count, daily_points, last_active, ref_id) VALUES (?, ?, ?, ?, ?, ?)",
                     (user_id, 0, 0, 0, today, ref_id))
         conn.commit()
-
-        # Referral system
         if ref_id and ref_id != user_id:
             cur.execute("UPDATE users SET points = points + ?, daily_points = daily_points + ? WHERE user_id=?",
                         (REFERRAL_POINTS, REFERRAL_POINTS, ref_id))
             conn.commit()
             bot.send_message(ref_id, f"🎉 आपके referral से नया यूज़र जुड़ा! आपको {REFERRAL_POINTS} कॉइन मिले।")
-
     else:
-        # अगर नया दिन है तो reset करो
         last_active = user[4]
         if last_active != today:
             cur.execute("UPDATE users SET daily_points=?, last_active=? WHERE user_id=?", (0, today, user_id))
             conn.commit()
-
     conn.close()
-
 
 # 🎬 /start Command
 @bot.message_handler(commands=["start"])
@@ -102,7 +98,6 @@ def start(message):
 
     bot.send_message(user_id, welcome_text, reply_markup=markup)
 
-    # ✅ Main Menu with Subscribe button
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
     menu.row("💰 Wallet", "🔗 Invite Friends")
@@ -129,13 +124,11 @@ def handle_all(message):
     elif text == "🎁 पॉइंट्स पाओ":
         cur.execute("SELECT points, daily_points, last_active FROM users WHERE user_id=?", (user_id,))
         points, dpoints, last_active = cur.fetchone()
-
         today = datetime.date.today().isoformat()
         if last_active != today:
             dpoints = 0
             cur.execute("UPDATE users SET daily_points=?, last_active=? WHERE user_id=?", (0, today, user_id))
             conn.commit()
-
         if dpoints + VIDEO_POINTS <= DAILY_POINT_LIMIT:
             new_points = points + VIDEO_POINTS
             new_dpoints = dpoints + VIDEO_POINTS
@@ -158,7 +151,6 @@ def handle_all(message):
     elif text == "📤 URL Submit":
         cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
         points = cur.fetchone()[0]
-
         if points >= LINK_SUBMIT_COST:
             bot.reply_to(message, "📌 कृपया वह YouTube URL भेजें जिसे आप सबमिट करना चाहते हैं।")
             bot.register_next_step_handler(message, process_url_submit)
@@ -186,24 +178,18 @@ def handle_all(message):
 def process_url_submit(message):
     user_id = message.from_user.id
     url = message.text
-
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
-
     cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
     points = cur.fetchone()[0]
-
     if points >= LINK_SUBMIT_COST:
         new_points = points - LINK_SUBMIT_COST
         cur.execute("UPDATE users SET points=? WHERE user_id=?", (new_points, user_id))
         conn.commit()
-
         bot.send_message(user_id, f"✅ आपका URL सबमिट हो गया!\nआपके {LINK_SUBMIT_COST} कॉइन कटे।")
-        # Admin को भेजो
         bot.send_message(ADMIN_ID, f"📩 New URL Submission:\n👤 User ID: {user_id}\n🔗 URL: {url}")
     else:
         bot.send_message(user_id, "⚠️ आपके पास पर्याप्त कॉइन नहीं हैं।")
-
     conn.close()
 
 
@@ -213,16 +199,13 @@ def sub_done(call):
     user_id = call.from_user.id
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
-
     cur.execute("SELECT points, daily_points, last_active FROM users WHERE user_id=?", (user_id,))
     points, dpoints, last_active = cur.fetchone()
-
     today = datetime.date.today().isoformat()
     if last_active != today:
         dpoints = 0
         cur.execute("UPDATE users SET daily_points=?, last_active=? WHERE user_id=?", (0, today, user_id))
         conn.commit()
-
     if dpoints + SUBSCRIBE_POINTS <= DAILY_POINT_LIMIT:
         new_points = points + SUBSCRIBE_POINTS
         new_dpoints = dpoints + SUBSCRIBE_POINTS
@@ -233,7 +216,6 @@ def sub_done(call):
         bot.send_message(user_id, f"🎉 Thank you! आपके Wallet में {SUBSCRIBE_POINTS} कॉइन जुड़ गए ✅")
     else:
         bot.answer_callback_query(call.id, "⚠️ आज की Daily Limit पूरी हो गई है।")
-
     conn.close()
 
 
