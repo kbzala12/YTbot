@@ -1,26 +1,22 @@
-import telebot
-import os
-import threading
 from flask import Flask
+import threading
+import telebot
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
+from config import BOT_TOKEN, WEB_URL  # WEB_URL same as app URL
 
 app = Flask(__name__)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# ✅ Bot handler
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "नमस्ते! बॉट चल रहा है ✅")
-
-# ✅ Flask route for uptime
-@app.route('/')
+@app.route("/")
 def home():
-    return "Bot is alive!"
+    return "WebApp is running!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=5000)
 
 def run_bot():
     bot.polling(none_stop=True)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    app.run(host="0.0.0.0", port=8080)
+    threading.Thread(target=run_flask).start()
+    run_bot()
