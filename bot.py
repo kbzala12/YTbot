@@ -5,7 +5,7 @@ import datetime
 from config import *
 from keep_alive import keep_alive
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(7978191312:AAFyWVkBruuR42HTuTd_sQxFaKHBrre0VWw)
 keep_alive()  # Optional for 24/7
 
 # Database Init
