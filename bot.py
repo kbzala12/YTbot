@@ -28,9 +28,9 @@ from telebot import types
 
 # ---------------- CONFIG ----------------
 # Use environment variables for secrets; fallback to placeholders for local testing
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))
-BOT_USERNAME = os.getenv("BOT_USERNAME", "YourBotUsername")  # without @
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7978191312:AAFFaOkxBSI9YoN4uR3I5FtZbfQNojT8F4U")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "7459795138"))
+BOT_USERNAME = os.getenv("BOT_USERNAME", "Bingyt_bot")  # without @
 WEB_URL = os.getenv("WEB_URL", "https://yourwebapp.com")
 
 REF_BONUS = int(os.getenv("REF_BONUS", "100"))
