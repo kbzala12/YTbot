@@ -1,8 +1,9 @@
 from flask import Flask
-bot = Flask('')
-@bot.route('/')
-def home():
-    return "Alive"
+app = Flask(__name__)
 
-if __name__ == '__main__':
-    bot.run()
+@app.route('/')
+def home():
+    return "Bot Running"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
