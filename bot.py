@@ -1,8 +1,9 @@
-import telebot
-from telebot import types
+import logging
 import sqlite3
-from config import BOT_TOKEN, ADMIN_ID, WEB_URL
-
+import random
+import string
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import Application, CommandHandler, ContextTypes
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # 🎥 Config
