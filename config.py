@@ -1,7 +1,7 @@
 import os
 
 # ---------------- Bot Credentials ----------------
-BOT_TOKEN = os.environ.get("BOT_TOKEN","7978191312:AAFyWVkBruuR42HTuTd_sQxFaKHBrre0VWw")  # Telegram Bot Token
+BOT_TOKEN = os.environ.get("BOT_TOKEN","7978191312:AAFFaOkxBSI9YoN4uR3I5FtZbfQNojT8F4U")  # Telegram Bot Token
 ADMIN_ID = int(os.environ.get("ADMIN_ID", 7459795138))  # Admin Telegram ID
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "Bingyt_bot")  # Bot Username
 
