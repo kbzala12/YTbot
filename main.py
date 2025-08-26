@@ -1,16 +1,11 @@
-# main.py
 import os
 import telebot
-from telebot import types
 import sqlite3
+from telebot import types
 from config import *
 
 # ---------- BOT INIT ----------
 bot = telebot.TeleBot(BOT_TOKEN)
-
-# ---------- KEEP ALIVE ----------
-from keep_alive import keep_alive
-keep_alive()
 
 # ---------- DB SETUP ----------
 conn = sqlite3.connect("bot.db", check_same_thread=False)
@@ -20,44 +15,32 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     username TEXT,
     coins INTEGER DEFAULT 0,
-    referrals INTEGER DEFAULT 0,
-    daily_points INTEGER DEFAULT 0
+    referrals INTEGER DEFAULT 0
 )
 """)
 conn.commit()
 
-# ---------- HELPERS ----------
-def get_user(user_id):
-    cursor.execute("SELECT username, coins, referrals, daily_points FROM users WHERE id=?", (user_id,))
-    return cursor.fetchone()
-
-def add_user(user_id, username):
-    cursor.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
-    conn.commit()
-
-def add_coins(user_id, amount):
-    cursor.execute("UPDATE users SET coins = coins + ?, daily_points = daily_points + ? WHERE id=?", 
-                   (amount, amount, user_id))
-    conn.commit()
-
-def add_referral(ref_id):
-    cursor.execute("UPDATE users SET referrals = referrals + 1, coins = coins + ? WHERE id=?", (REFERRAL_POINTS, ref_id))
-    conn.commit()
-
 # ---------- START ----------
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_id = message.chat.id
+    user_id = message.from_user.id
     username = message.from_user.username or message.from_user.first_name
-    add_user(user_id, username)
+
+    # अगर user नया है तो DB में डाल दो
+    cursor.execute("SELECT id FROM users WHERE id=?", (user_id,))
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO users (id, username, coins, referrals) VALUES (?, ?, ?, ?)", 
+                       (user_id, username, 0, 0))
+        conn.commit()
 
     # Referral check
     args = message.text.split()
-    if len(args) > 1 and args[1].isdigit():
+    if len(args) > 1:
         ref_id = int(args[1])
         if ref_id != user_id:
-            add_referral(ref_id)
-            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} Coins मिले ✅")
+            cursor.execute("UPDATE users SET referrals = referrals + 1, coins = coins + ? WHERE id=?", 
+                           (REFERRAL_POINTS, ref_id))
+            conn.commit()
 
     # Welcome Text
     welcome_text = f"""
@@ -74,7 +57,7 @@ def start(message):
 
 👥 *रेफरल सिस्टम:*  
 • दोस्तों को इनवाइट करें  
-• हर नए यूज़र पर {REFERRAL_POINTS} पॉइंट्स  
+• हर नए यूज़र पर 100 पॉइंट्स  
 
 ⚠️ *महत्वपूर्ण:*  
 बॉट यूज़ करने के लिए पहले ग्रुप जॉइन करना ज़रूरी है।  
@@ -82,81 +65,46 @@ def start(message):
 Welcome 😊
 """
 
-    # Inline buttons
-    inline_kb = types.InlineKeyboardMarkup()
-    web_btn = types.InlineKeyboardButton("🎬 Open WebApp", url=WEB_URL)
-    invite_btn = types.InlineKeyboardButton("👥 Invite Friends", url=f"https://t.me/{BOT_USERNAME}?start={user_id}")
-    inline_kb.add(web_btn, invite_btn)
+    # Buttons
+    keyboard = types.InlineKeyboardMarkup()
+    open_btn = types.InlineKeyboardButton("🎬 Open WebApp", url=WEB_URL)
+    invite_btn = types.InlineKeyboardButton("👥 Invite Friends", 
+                                            url=f"https://t.me/{BOT_USERNAME}?start={user_id}")
+    keyboard.add(open_btn)
+    keyboard.add(invite_btn)
 
-    bot.send_message(user_id, welcome_text, parse_mode="Markdown", reply_markup=inline_kb)
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=keyboard)
 
-    # Reply Keyboard
-    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    menu.row("🏠 Home", "🎁 Daily Bonus")
-    menu.row("🧑‍🤝‍🧑 Invite", "👤 Profile")
-    menu.row("💰 Wallet", "📤 Submit URL")
-    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
-
-# ---------- MESSAGE HANDLER ----------
-@bot.message_handler(func=lambda msg: True)
-def handle_buttons(message):
-    user_id = message.chat.id
-    user = get_user(user_id)
-    if not user:
-        return bot.send_message(user_id, "❌ पहले /start दबाएँ।")
-    
-    text = message.text
-    if text == "🏠 Home":
-        bot.send_message(user_id, f"🎬 Open WebApp: {WEB_URL}")
-    elif text == "🎁 Daily Bonus":
-        username, coins, refs, daily_points = user
-        if daily_points + 30 <= 100:
-            add_coins(user_id, 30)
-            bot.send_message(user_id, "🎁 आपने 30 Coins Daily Bonus में पाए ✅")
-        else:
-            bot.send_message(user_id, "⚠️ आज की daily limit पूरी हो गई है। कल फिर कोशिश करें!")
-    elif text == "🧑‍🤝‍🧑 Invite":
-        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        bot.send_message(user_id, f"🔗 आपका Referral Link:\n{ref_link}\nहर invite पर {REFERRAL_POINTS} Coins!")
-    elif text == "👤 Profile":
-        username, coins, refs, daily_points = user
+# ---------- PROFILE ----------
+@bot.message_handler(commands=['me'])
+def profile(message):
+    user_id = message.from_user.id
+    cursor.execute("SELECT coins, referrals FROM users WHERE id=?", (user_id,))
+    data = cursor.fetchone()
+    if data:
+        coins, refs = data
         text = f"""
 👤 *Profile*  
 
 🆔 ID: `{user_id}`  
 💳 Balance: *{coins} Coins*  
-📅 Daily Points: *{daily_points}*  
 👥 Referrals: *{refs}*  
 """
-        bot.send_message(user_id, text, parse_mode="Markdown")
-    elif text == "💰 Wallet":
-        username, coins, refs, daily_points = user
-        bot.send_message(user_id, f"💳 आपके Wallet में Coins: {coins}")
-    elif text == "📤 Submit URL":
-        if coins < LINK_SUBMIT_COST:
-            bot.send_message(user_id, f"❌ आपके पास {LINK_SUBMIT_COST} Coins नहीं हैं।")
-        else:
-            msg = bot.send_message(user_id, "📤 अपना लिंक भेजें:")
-            bot.register_next_step_handler(msg, submit_url)
+        bot.send_message(message.chat.id, text, parse_mode="Markdown")
     else:
-        bot.send_message(user_id, "❌ Invalid Option! नीचे के buttons इस्तेमाल करें।")
-
-def submit_url(message):
-    user_id = message.chat.id
-    url = message.text
-    add_coins(user_id, -LINK_SUBMIT_COST)
-    bot.send_message(user_id, f"✅ आपका लिंक भेज दिया गया:\n{url}")
-    bot.send_message(ADMIN_ID, f"🔔 नया URL submit: {url}\nUser ID: {user_id}")
+        bot.send_message(message.chat.id, "❌ आप अभी तक register नहीं हुए। /start दबाएँ।")
 
 # ---------- ADMIN PANEL ----------
 @bot.message_handler(commands=['admin'])
 def admin_panel(message):
-    if message.chat.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID:
         return bot.send_message(message.chat.id, "❌ Access Denied.")
+
     cursor.execute("SELECT COUNT(*), SUM(coins) FROM users")
     total_users, total_coins = cursor.fetchone()
     total_users = total_users or 0
     total_coins = total_coins or 0
+
     report = f"""
 📊 *Admin Panel*  
 
