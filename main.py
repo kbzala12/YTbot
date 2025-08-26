@@ -41,7 +41,7 @@ def add_coins(user_id, amount):
     conn.commit()
 
 def add_referral(ref_id):
-    cursor.execute("UPDATE users SET referrals = referrals + 1, coins = coins + 100 WHERE id=?", (ref_id,))
+    cursor.execute("UPDATE users SET referrals = referrals + 1, coins = coins + ? WHERE id=?", (REFERRAL_POINTS, ref_id))
     conn.commit()
 
 # ---------- START ----------
@@ -57,7 +57,7 @@ def start(message):
         ref_id = int(args[1])
         if ref_id != user_id:
             add_referral(ref_id)
-            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको 100 Coins मिले ✅")
+            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} Coins मिले ✅")
 
     # Welcome Text
     welcome_text = f"""
@@ -68,15 +68,25 @@ def start(message):
 📹 वीडियो देखो, कॉइन कमाओ और  
 💰 अपना YouTube चैनल मोनेटाइजेशन करवाओ ✅  
 
+📌 *कमाई नियम:*  
+• प्रत्येक वीडियो = 30 पॉइंट्स  
+• दैनिक लिमिट = 100 पॉइंट्स  
+
+👥 *रेफरल सिस्टम:*  
+• दोस्तों को इनवाइट करें  
+• हर नए यूज़र पर {REFERRAL_POINTS} पॉइंट्स  
+
 ⚠️ *महत्वपूर्ण:*  
 बॉट यूज़ करने के लिए पहले ग्रुप जॉइन करना ज़रूरी है।  
+
+Welcome 😊
 """
 
     # Inline buttons
     inline_kb = types.InlineKeyboardMarkup()
     web_btn = types.InlineKeyboardButton("🎬 Open WebApp", url=WEB_URL)
-    group_btn = types.InlineKeyboardButton("👥 Join Group", url=GROUP_URL)
-    inline_kb.add(web_btn, group_btn)
+    invite_btn = types.InlineKeyboardButton("👥 Invite Friends", url=f"https://t.me/{BOT_USERNAME}?start={user_id}")
+    inline_kb.add(web_btn, invite_btn)
 
     bot.send_message(user_id, welcome_text, parse_mode="Markdown", reply_markup=inline_kb)
 
@@ -107,7 +117,7 @@ def handle_buttons(message):
             bot.send_message(user_id, "⚠️ आज की daily limit पूरी हो गई है। कल फिर कोशिश करें!")
     elif text == "🧑‍🤝‍🧑 Invite":
         ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        bot.send_message(user_id, f"🔗 आपका Referral Link:\n{ref_link}\nहर नए user पर 100 Coins!")
+        bot.send_message(user_id, f"🔗 आपका Referral Link:\n{ref_link}\nहर invite पर {REFERRAL_POINTS} Coins!")
     elif text == "👤 Profile":
         username, coins, refs, daily_points = user
         text = f"""
@@ -123,11 +133,10 @@ def handle_buttons(message):
         username, coins, refs, daily_points = user
         bot.send_message(user_id, f"💳 आपके Wallet में Coins: {coins}")
     elif text == "📤 Submit URL":
-        username, coins, refs, daily_points = user
-        if coins < 1280:
-            bot.send_message(user_id, f"❌ आपके पास 1280 Coins नहीं हैं।")
+        if coins < LINK_SUBMIT_COST:
+            bot.send_message(user_id, f"❌ आपके पास {LINK_SUBMIT_COST} Coins नहीं हैं।")
         else:
-            msg = bot.send_message(user_id, "📤 अपना लिंक भेजें (1280 Coins में):")
+            msg = bot.send_message(user_id, "📤 अपना लिंक भेजें:")
             bot.register_next_step_handler(msg, submit_url)
     else:
         bot.send_message(user_id, "❌ Invalid Option! नीचे के buttons इस्तेमाल करें।")
@@ -135,9 +144,9 @@ def handle_buttons(message):
 def submit_url(message):
     user_id = message.chat.id
     url = message.text
-    add_coins(user_id, -1280)  # Deduct 1280 coins
+    add_coins(user_id, -LINK_SUBMIT_COST)
     bot.send_message(user_id, f"✅ आपका लिंक भेज दिया गया:\n{url}")
-    bot.send_message(ADMIN_ID, f"🔔 नया URL submit: {url}\nUser ID: {user_id}\nUsername: {message.from_user.username}")
+    bot.send_message(ADMIN_ID, f"🔔 नया URL submit: {url}\nUser ID: {user_id}")
 
 # ---------- ADMIN PANEL ----------
 @bot.message_handler(commands=['admin'])
@@ -157,5 +166,5 @@ def admin_panel(message):
     bot.send_message(message.chat.id, report, parse_mode="Markdown")
 
 # ---------- RUN ----------
-print("🤖 Bot setup complete. Polling is disabled to prevent running, DB remains active.")
-# bot.infinity_polling()  # Commented to prevent running automatically
+print("🤖 Bot is running...")
+bot.infinity_polling()
