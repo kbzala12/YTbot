@@ -1,19 +1,12 @@
-import telebot, sqlite3, os
+import telebot, sqlite3
 from telebot import types
 from datetime import datetime, timedelta
+from config import BOT_TOKEN, ADMIN_ID, WEB_URL, COMMUNITY_LINK, REF_POINTS, DAILY_BONUS
 
-# ========== CONFIG ==========
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "7978191312:AAFFaOkxBSI9YoN4uR3I5FtZbfQNojT8F4U")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 7459795138))
-WEB_URL = os.environ.get("WEB_URL", "https://studiokbyt.onrender.com/")
-COMMUNITY_LINK = os.environ.get("COMMUNITY_LINK", "https://t.me/boomupbot10")
-
-REF_POINTS = 100      # रेफरल कॉइन
-DAILY_BONUS = 30      # डेली बोनस
-
+# ========== Bot Setup ==========
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# ========== DATABASE ==========
+# ========== Database ==========
 conn = sqlite3.connect("bot.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -27,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 conn.commit()
 
-# ========== MAIN KEYBOARD ==========
+# ========== Keyboards ==========
 def main_keyboard():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row("🎁 Wallet", "📤 Submit URL")
@@ -35,20 +28,19 @@ def main_keyboard():
     kb.row("🌐 Join Community")
     return kb
 
-# ========== ADMIN KEYBOARD ==========
 def admin_keyboard():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row("📊 Total Users", "💰 Total Coins")
     kb.row("⬅️ Back")
     return kb
 
-# ========== START ==========
+# ========== Start Command ==========
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     name = message.from_user.first_name
 
-    # नया यूज़र DB में
+    # DB में यूज़र चेक और insert
     cursor.execute("SELECT id FROM users WHERE id=?", (user_id,))
     if not cursor.fetchone():
         ref = None
@@ -57,17 +49,16 @@ def start(message):
                 ref = int(message.text.split()[1])
                 if ref != user_id:
                     cursor.execute("UPDATE users SET points = points + ? WHERE id=?", (REF_POINTS, ref))
+                    bot.send_message(ref, f"🎉 नया यूज़र जुड़ा! आपको {REF_POINTS} कॉइन मिले ✅")
             except:
                 pass
         cursor.execute("INSERT INTO users (id, name, points, referred_by) VALUES (?, ?, ?, ?)",
                        (user_id, name, 0, ref))
         conn.commit()
-        if ref:
-            bot.send_message(ref, f"🎉 नया यूज़र जुड़ा! आपको {REF_POINTS} कॉइन मिले ✅")
 
     # Welcome Message
     welcome_text = (
-        "🎬 *Video Coin Earner Bot में आपका स्वागत है!* 🎬\n\n"
+        f"🎬 *Video Coin Earner Bot में आपका स्वागत है!* 🎬\n\n"
         f"नमस्ते {name}! 👋\n\n"
         "📹 वीडियो देखो, कॉइन कमाओ और  \n"
         "💰 अपना YouTube चैनल मोनेटाइजेशन करवाओ ✅\n\n"
@@ -75,7 +66,7 @@ def start(message):
         "⚠️ बॉट यूज़ करने के लिए पहले कम्युनिटी जॉइन करें।"
     )
 
-    # Inline buttons: Open App + Join Community + Invite
+    # Inline buttons: Open App + Join + Invite
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🎬 Open App", url=WEB_URL))
     markup.add(types.InlineKeyboardButton("📢 Join Community", url=COMMUNITY_LINK))
@@ -84,7 +75,7 @@ def start(message):
     bot.send_message(user_id, welcome_text, parse_mode="Markdown", reply_markup=markup)
     bot.send_message(user_id, "👇 नीचे मेन मेन्यू:", reply_markup=main_keyboard())
 
-# ========== WALLET ==========
+# ========== Wallet ==========
 @bot.message_handler(func=lambda m: m.text == "🎁 Wallet")
 def wallet(message):
     user_id = message.chat.id
@@ -93,12 +84,12 @@ def wallet(message):
     bot.send_message(user_id, f"👤 *आपका प्रोफाइल*\n\n🆔 ID: {user_id}\n💰 Wallet Balance: {points} कॉइन",
                      parse_mode="Markdown")
 
-# ========== SUBMIT URL ==========
+# ========== Submit URL ==========
 @bot.message_handler(func=lambda m: m.text == "📤 Submit URL")
 def submit_url(message):
     bot.send_message(message.chat.id, f"🔗 अपना लिंक यहां सबमिट करें: \n{WEB_URL}")
 
-# ========== INVITE ==========
+# ========== Invite ==========
 @bot.message_handler(func=lambda m: m.text == "👥 Invite")
 def invite(message):
     user_id = message.chat.id
@@ -106,7 +97,7 @@ def invite(message):
                      f"👥 दोस्तों को इनवाइट करें और हर नए यूज़र पर {REF_POINTS} पॉइंट्स कमाएँ!\n\n"
                      f"👉 आपका लिंक:\nhttps://t.me/{bot.get_me().username}?start={user_id}")
 
-# ========== DAILY BONUS ==========
+# ========== Daily Bonus ==========
 @bot.message_handler(func=lambda m: m.text == "🎉 Daily Bonus")
 def daily_bonus(message):
     user_id = message.chat.id
@@ -121,12 +112,12 @@ def daily_bonus(message):
     else:
         bot.send_message(user_id, "❌ आपने आज का बोनस पहले ही ले लिया है। कल फिर आएं!")
 
-# ========== JOIN COMMUNITY ==========
+# ========== Join Community ==========
 @bot.message_handler(func=lambda m: m.text == "🌐 Join Community")
 def join(message):
     bot.send_message(message.chat.id, f"🌐 हमारी कम्युनिटी जॉइन करें:\n👉 {COMMUNITY_LINK}")
 
-# ========== ADMIN PANEL ==========
+# ========== Admin Panel ==========
 @bot.message_handler(commands=['admin'])
 def admin(message):
     if message.chat.id == ADMIN_ID:
@@ -153,6 +144,6 @@ def back(message):
     if message.chat.id == ADMIN_ID:
         bot.send_message(ADMIN_ID, "⬅️ Main Menu", reply_markup=main_keyboard())
 
-# ========== RUN BOT ==========
+# ========== Run Bot ==========
 print("🤖 Bot Started...")
 bot.infinity_polling()
