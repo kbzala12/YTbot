@@ -9,7 +9,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 DAILY_POINT_LIMIT = 100
 VIDEO_POINTS = 30
 REFERRAL_POINTS = 100
-BOT_USERNAME = "Bingyt_bot"   # ✅ अब invite लिंक के लिए नया bot username
+BOT_USERNAME = "Bingyt_bot"      # तुम्हारा bot username
+CHANNEL_USERNAME = "@boomupbot10"  # 🔴 अपना channel username डालो
 
 # 📂 Database Setup
 def init_db():
@@ -50,13 +51,33 @@ def check_user(user_id, ref_id=None):
 
     conn.close()
 
+# 📌 Force Subscribe Function
+def is_subscribed(user_id):
+    try:
+        chat_member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if chat_member.status in ["member", "administrator", "creator"]:
+            return True
+        else:
+            return False
+    except:
+        return False
+
 # 🎬 /start Command
 @bot.message_handler(commands=["start"])
 def start(message):
     user_id = message.from_user.id
+
+    # 👉 पहले चेक करो user channel join है या नहीं
+    if not is_subscribed(user_id):
+        markup = types.InlineKeyboardMarkup()
+        join_btn = types.InlineKeyboardButton("📢 चैनल जॉइन करो", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")
+        check_btn = types.InlineKeyboardButton("✅ जॉइन कर लिया", callback_data="check_sub")
+        markup.add(join_btn, check_btn)
+        bot.send_message(user_id, "⚠️ इस बॉट का इस्तेमाल करने के लिए पहले हमारा चैनल जॉइन करें 👇", reply_markup=markup)
+        return
+
     args = message.text.split()
     ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
-    
     check_user(user_id, ref_id)
 
     welcome_text = f"""
@@ -82,8 +103,7 @@ def start(message):
 
     markup = types.InlineKeyboardMarkup()
     web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
-    # ✅ Invite Link अब Bingyt_bot के साथ
-    invite_link = f"https://t.me/Bingyt_bot?start={user_id}"
+    invite_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
     invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=invite_link)
     markup.add(web_btn, invite_btn)
 
@@ -98,6 +118,16 @@ def start(message):
 @bot.message_handler(func=lambda msg: True)
 def handle_all(message):
     user_id = message.from_user.id
+
+    # 👉 Channel check
+    if not is_subscribed(user_id):
+        markup = types.InlineKeyboardMarkup()
+        join_btn = types.InlineKeyboardButton("📢 चैनल जॉइन करो", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")
+        check_btn = types.InlineKeyboardButton("✅ जॉइन कर लिया", callback_data="check_sub")
+        markup.add(join_btn, check_btn)
+        bot.send_message(user_id, "⚠️ पहले चैनल जॉइन करो फिर बटन चलेगा 👇", reply_markup=markup)
+        return
+
     check_user(user_id)
     text = message.text
 
@@ -107,7 +137,7 @@ def handle_all(message):
     if text == "📊 प्रोफाइल":
         cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
         points, dpoints = cur.fetchone()
-        ref_link = f"https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
+        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
         bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज आपने {dpoints}/{DAILY_POINT_LIMIT} पॉइंट्स कमाए।\n\n🔗 आपका Referral Link:\n{ref_link}")
 
     elif text == "🎁 पॉइंट्स पाओ":
@@ -136,6 +166,16 @@ def handle_all(message):
             bot.reply_to(message, "⛔ यह फीचर सिर्फ़ Admin के लिए है।")
 
     conn.close()
+
+# 🔘 Callback Handler (जब "✅ जॉइन कर लिया" दबाए)
+@bot.callback_query_handler(func=lambda call: call.data == "check_sub")
+def check_subscription(call):
+    user_id = call.from_user.id
+    if is_subscribed(user_id):
+        bot.answer_callback_query(call.id, "✅ आपने चैनल जॉइन कर लिया!")
+        bot.send_message(user_id, "🎉 अब आप बॉट इस्तेमाल कर सकते हो। /start दबाओ")
+    else:
+        bot.answer_callback_query(call.id, "❌ अभी तक आपने चैनल जॉइन नहीं किया।")
 
 # ♾ Bot Run
 bot.infinity_polling()
