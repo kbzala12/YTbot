@@ -1,27 +1,24 @@
 import telebot
 from telebot import types
 import sqlite3
-
-# ---------------- CONFIG ----------------
-BOT_TOKEN = "PUT-YOUR-TOKEN-HERE"   # 🔑 BotFather से लिया असली Token यहां डालो
-ADMIN_ID = 123456789                # अपना Telegram User ID यहां डालो
-BOT_USERNAME = "YourBotUsername"    # बिना @ के (जैसे: MyBot123)
-WEB_URL = "https://yourwebapp.com"  # अगर WebApp नहीं है तो खाली छोड़ सकते हो
-
-# ---------------- POINT SYSTEM ----------------
-DAILY_POINT_LIMIT = 100
-VIDEO_POINTS = 30
-REFERRAL_POINTS = 100
+from config import BOT_TOKEN, ADMIN_ID, WEB_URL
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# ---------------- DATABASE ----------------
+# 🎥 Config
+DAILY_POINT_LIMIT = 100
+VIDEO_POINTS = 30
+REFERRAL_POINTS = 100
+BOT_USERNAME = "Bingyt_bot"   # ✅ अब invite लिंक के लिए नया bot username
+
+# 📂 Database Setup
 def init_db():
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
     cur.execute('''CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         points INTEGER DEFAULT 0,
+        video_count INTEGER DEFAULT 0,
         daily_points INTEGER DEFAULT 0,
         ref_id INTEGER
     )''')
@@ -30,7 +27,7 @@ def init_db():
 
 init_db()
 
-# ---------------- USER CHECK ----------------
+# 📌 User check & create
 def check_user(user_id, ref_id=None):
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
@@ -39,8 +36,9 @@ def check_user(user_id, ref_id=None):
     user = cur.fetchone()
 
     if not user:
-        cur.execute("INSERT INTO users (user_id, points, daily_points, ref_id) VALUES (?, ?, ?, ?)",
-                    (user_id, 0, 0, ref_id))
+        initial_points = REFERRAL_POINTS if ref_id else 0
+        cur.execute("INSERT INTO users (user_id, points, video_count, daily_points, ref_id) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, initial_points, 0, initial_points, ref_id))
         conn.commit()
 
         # Referrer को points देना
@@ -48,14 +46,11 @@ def check_user(user_id, ref_id=None):
             cur.execute("UPDATE users SET points = points + ?, daily_points = daily_points + ? WHERE user_id=?",
                         (REFERRAL_POINTS, REFERRAL_POINTS, ref_id))
             conn.commit()
-            try:
-                bot.send_message(ref_id, f"🎉 आपके referral से नया user जुड़ा!\nआपको {REFERRAL_POINTS} पॉइंट्स मिले।")
-            except:
-                pass
+            bot.send_message(ref_id, f"🎉 आपके referral से नए user ने join किया! आपको {REFERRAL_POINTS} पॉइंट्स मिले।")
 
     conn.close()
 
-# ---------------- START COMMAND ----------------
+# 🎬 /start Command
 @bot.message_handler(commands=["start"])
 def start(message):
     user_id = message.from_user.id
@@ -65,33 +60,41 @@ def start(message):
     check_user(user_id, ref_id)
 
     welcome_text = f"""
-👋 नमस्ते {message.from_user.first_name}!
-🎬 Video Coin Earner Bot में आपका स्वागत है। 
+🎬 Video Coin Earner Bot में आपका स्वागत है! 🎬
+
+नमस्ते {message.from_user.first_name}!
+
+📹 वीडियो देखो, कॉइन कमाओ और  
+💰 अपना YouTube चैनल मोनेटाइजेशन करवाओ ✅  
 
 📌 कमाई नियम:
 • प्रत्येक वीडियो = {VIDEO_POINTS} पॉइंट्स  
 • दैनिक लिमिट = {DAILY_POINT_LIMIT} पॉइंट्स  
-• हर रेफरल पर = {REFERRAL_POINTS} पॉइंट्स  
+
+👥 रेफरल सिस्टम:  
+• दोस्तों को इनवाइट करें  
+• हर नए यूज़र पर {REFERRAL_POINTS} पॉइंट्स  
+
+⚠️ महत्वपूर्ण: बॉट यूज़ करने के लिए पहले ग्रुप जॉइन करना ज़रूरी है।  
 
 आपका ID: {user_id}
 """
 
     markup = types.InlineKeyboardMarkup()
-    if WEB_URL:
-        web_btn = types.InlineKeyboardButton("🚀 Open WebApp", url=WEB_URL)
-        markup.add(web_btn)
-    invite_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+    web_btn = types.InlineKeyboardButton("🚀 Open WebApp", web_app=types.WebAppInfo(WEB_URL))
+    # ✅ Invite Link अब Bingyt_bot के साथ
+    invite_link = f"https://t.me/Bingyt_bot?start={user_id}"
     invite_btn = types.InlineKeyboardButton("🔗 Invite Friends", url=invite_link)
-    markup.add(invite_btn)
+    markup.add(web_btn, invite_btn)
 
     bot.send_message(user_id, welcome_text, reply_markup=markup)
 
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.row("📊 प्रोफाइल", "🎁 पॉइंट्स पाओ")
     menu.row("💰 Wallet")
-    bot.send_message(user_id, "👇 नीचे से चुनें:", reply_markup=menu)
+    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
-# ---------------- MENU HANDLER ----------------
+# 🔘 Menu Handler
 @bot.message_handler(func=lambda msg: True)
 def handle_all(message):
     user_id = message.from_user.id
@@ -104,8 +107,8 @@ def handle_all(message):
     if text == "📊 प्रोफाइल":
         cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
         points, dpoints = cur.fetchone()
-        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज: {dpoints}/{DAILY_POINT_LIMIT}\n\n🔗 Referral Link:\n{ref_link}")
+        ref_link = f"https://t.me/Bingyt_bot?start={user_id}"  # ✅ Updated referral link
+        bot.reply_to(message, f"👤 आपके पॉइंट्स: {points}\n📅 आज आपने {dpoints}/{DAILY_POINT_LIMIT} पॉइंट्स कमाए।\n\n🔗 आपका Referral Link:\n{ref_link}")
 
     elif text == "🎁 पॉइंट्स पाओ":
         cur.execute("SELECT points, daily_points FROM users WHERE user_id=?", (user_id,))
@@ -119,21 +122,20 @@ def handle_all(message):
             conn.commit()
             bot.reply_to(message, f"✅ आपको {VIDEO_POINTS} पॉइंट्स मिले! (आज {new_dpoints}/{DAILY_POINT_LIMIT})")
         else:
-            bot.reply_to(message, "⚠️ आज की लिमिट पूरी हो चुकी है।")
+            bot.reply_to(message, "⚠️ आज की पॉइंट्स लिमिट पूरी हो गई है। कल फिर कोशिश करें!")
 
     elif text == "💰 Wallet":
         cur.execute("SELECT points FROM users WHERE user_id=?", (user_id,))
         points = cur.fetchone()[0]
-        bot.reply_to(message, f"💵 Wallet Balance: {points} पॉइंट्स")
+        bot.reply_to(message, f"💵 आपके Wallet में पॉइंट्स: {points}")
 
     elif text == "👑 Admin":
         if user_id == ADMIN_ID:
             bot.reply_to(message, "✅ आप Admin हैं!")
         else:
-            bot.reply_to(message, "⛔ सिर्फ़ Admin के लिए।")
+            bot.reply_to(message, "⛔ यह फीचर सिर्फ़ Admin के लिए है।")
 
     conn.close()
 
-# ---------------- RUN BOT ----------------
-print("🤖 Bot is running...")
+# ♾ Bot Run
 bot.infinity_polling()
