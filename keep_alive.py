@@ -9,7 +9,7 @@ def home():
 
 def run():
     # 0.0.0.0 पर bind ताकि Render/Replit इसे पिंग कर सकें
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=12000)
 
 def keep_alive():
     t = Thread(target=run, daemon=True)
