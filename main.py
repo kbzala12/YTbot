@@ -1,165 +1,162 @@
 import os
+import sqlite3
+import datetime
 import telebot
 from telebot import types
-import sqlite3
+
 from config import *
-
-# ---------- BOT INIT ----------
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# ---------- KEEP ALIVE ----------
 from keep_alive import keep_alive
+
+# ---- Keep Alive (for Render/Replit + UptimeRobot) ----
 keep_alive()
 
-# ---------- DB SETUP ----------
+# ---- Telegram Bot ----
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
+
+# ---- DB Connection (persistent) ----
 conn = sqlite3.connect("bot.db", check_same_thread=False)
-cursor = conn.cursor()
+cur = conn.cursor()
 
-# Users Table
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
-    username TEXT,
-    coins INTEGER DEFAULT 0,
-    referrals INTEGER DEFAULT 0,
-    last_claim DATE
-)
-""")
-
-# URLs Table
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS urls (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    url TEXT
-)
-""")
-conn.commit()
-
-# ---------- HELPERS ----------
-def get_user(user_id):
-    cursor.execute("SELECT username, coins, referrals, last_claim FROM users WHERE id=?", (user_id,))
-    return cursor.fetchone()
-
-def add_user(user_id, username):
-    cursor.execute("INSERT OR IGNORE INTO users (id, username) VALUES (?, ?)", (user_id, username))
+# Helpers
+def ensure_user(user_id: int, username: str):
+    cur.execute("INSERT OR IGNORE INTO users (user_id, username) VALUES (?,?)", (user_id, username))
     conn.commit()
 
-def add_coins(user_id, amount):
-    cursor.execute("UPDATE users SET coins = coins + ? WHERE id=?", (amount, user_id))
+def get_user(user_id: int):
+    cur.execute("SELECT username, coins, invites, last_claim FROM users WHERE user_id=?", (user_id,))
+    return cur.fetchone()
+
+def add_coins(user_id: int, amount: int):
+    cur.execute("UPDATE users SET coins = coins + ? WHERE user_id=?", (amount, user_id))
     conn.commit()
 
-def add_referral(ref_id):
-    cursor.execute("UPDATE users SET referrals = referrals + 1, coins = coins + 100 WHERE id=?", (ref_id,))
+def set_last_claim_today(user_id: int):
+    today = datetime.date.today().isoformat()
+    cur.execute("UPDATE users SET last_claim=? WHERE user_id=?", (today, user_id))
     conn.commit()
 
-def add_url(user_id, url):
-    cursor.execute("INSERT INTO urls (user_id, url) VALUES (?, ?)", (user_id, url))
+def can_claim_today(last_claim: str | None) -> bool:
+    return (last_claim or "") != datetime.date.today().isoformat()
+
+def add_referral(inviter_id: int):
+    cur.execute("UPDATE users SET invites = invites + 1, coins = coins + ? WHERE user_id=?", (REFERRAL_BONUS, inviter_id))
     conn.commit()
 
-# ---------- START ----------
-@bot.message_handler(commands=['start'])
-def start(message):
+def save_url(user_id: int, url: str):
+    cur.execute("INSERT INTO submits (user_id, url) VALUES (?,?)", (user_id, url))
+    conn.commit()
+
+def admin_keyboard_row(kb: types.ReplyKeyboardMarkup, user_id: int):
+    if user_id == ADMIN_ID:
+        kb.row("👨‍💻 Admin Panel")
+
+# ---- /start ----
+@bot.message_handler(commands=["start"])
+def cmd_start(message):
     user_id = message.chat.id
     username = message.from_user.username or message.from_user.first_name
-    add_user(user_id, username)
+    ensure_user(user_id, username)
 
-    # Referral check
+    # Referral
     args = message.text.split()
     if len(args) > 1 and args[1].isdigit():
         ref_id = int(args[1])
         if ref_id != user_id:
             add_referral(ref_id)
-            bot.send_message(ref_id, f"🎉 आपके referral से नया user जुड़ा! आपको 100 Coins मिले ✅")
+            try:
+                bot.send_message(ref_id, f"🎉 आपके referral से नया user जुड़ा! आपको *{REFERRAL_BONUS}* coins मिले ✅")
+            except:
+                pass
 
-    # Welcome text
-    welcome_text = f"""
-🎬 *Video Coin Earner Bot* 🎬
+    welcome = (
+        "🎬 *Video Coin Earner Bot*\n\n"
+        f"नमस्ते {message.from_user.first_name}!\n\n"
+        "📹 वीडियो देखो, कॉइन कमाओ\n"
+        "💰 और अपना YouTube चैनल प्रमोट करो ✅"
+    )
 
-नमस्ते {message.from_user.first_name}!  
+    # Inline (Welcome) buttons: Open, Invite, Join
+    ikb = types.InlineKeyboardMarkup()
+    b_web   = types.InlineKeyboardButton("🎬 Open WebApp", url=WEB_URL)
+    b_inv   = types.InlineKeyboardButton("👥 Invite Friends", url=f"https://t.me/{BOT_USERNAME}?start={user_id}")
+    b_join  = types.InlineKeyboardButton("📌 Join Group", url=GROUP_URL)
+    ikb.add(b_web, b_inv, b_join)
 
-📹 वीडियो देखो, कॉइन कमाओ और  
-💰 अपना YouTube चैनल मोनेटाइजेशन करवाओ ✅
-"""
+    bot.send_message(user_id, welcome, reply_markup=ikb)
 
-    # Inline buttons
-    inline_kb = types.InlineKeyboardMarkup()
-    web_btn = types.InlineKeyboardButton("🎬 Open WebApp", url=WEB_URL)
-    invite_btn = types.InlineKeyboardButton("👥 Invite Friends", url=f"https://t.me/{BOT_USERNAME}?start={user_id}")
-    group_btn = types.InlineKeyboardButton("📌 Join Group", url=GROUP_URL)
-    inline_kb.add(web_btn, invite_btn, group_btn)
+    # Reply Keyboard: Wallet, Submit URL, Daily Claim, Invite (+ Admin for owner)
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("💰 Wallet", "📤 Submit URL")
+    kb.row("🎁 Daily Claim", "🧑‍🤝‍🧑 Invite")
+    admin_keyboard_row(kb, user_id)
+    bot.send_message(user_id, "👇 नीचे दिए गए बटन इस्तेमाल करें:", reply_markup=kb)
 
-    bot.send_message(user_id, welcome_text, parse_mode="Markdown", reply_markup=inline_kb)
-
-    # Reply Keyboard
-    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    menu.row("💰 Wallet", "📤 Submit URL")
-    menu.row("🎁 Daily Claim", "🧑‍🤝‍🧑 Invite")
-    menu.row("👨‍💻 Admin Panel") if user_id == ADMIN_ID else None
-    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
-
-# ---------- MESSAGE HANDLER ----------
-import datetime
-
-@bot.message_handler(func=lambda msg: True)
-def handle_buttons(message):
+# ---- Buttons handler ----
+@bot.message_handler(func=lambda m: True)
+def on_message(message):
     user_id = message.chat.id
-    user = get_user(user_id)
-    if not user:
+    rec = get_user(user_id)
+    if not rec:
         return bot.send_message(user_id, "❌ पहले /start दबाएँ।")
+    username, coins, invites, last_claim = rec
 
-    username, coins, refs, last_claim = user
     text = message.text
 
     if text == "💰 Wallet":
-        bot.send_message(user_id, f"💳 आपके Wallet में: {coins} Coins")
-    
-    elif text == "🎁 Daily Claim":
-        today = datetime.date.today().isoformat()
-        if last_claim == today:
-            bot.send_message(user_id, "⚠️ आपने आज का Daily Claim ले लिया है। कल फिर से आएं!")
+        return bot.send_message(user_id, f"💳 आपके Wallet में: *{coins}* coins")
+
+    if text == "🎁 Daily Claim":
+        if can_claim_today(last_claim):
+            add_coins(user_id, DAILY_CLAIM)
+            set_last_claim_today(user_id)
+            return bot.send_message(user_id, f"🎁 आज के *{DAILY_CLAIM}* coins claim हो गए ✅")
         else:
-            add_coins(user_id, 70)
-            cursor.execute("UPDATE users SET last_claim=? WHERE id=?", (today, user_id))
-            conn.commit()
-            bot.send_message(user_id, "🎁 आपने आज के लिए 70 Coins Claim किए ✅")
+            return bot.send_message(user_id, "⚠️ आपने आज का claim ले लिया है। कल फिर आएं!")
 
-    elif text == "🧑‍🤝‍🧑 Invite":
-        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-        bot.send_message(user_id, f"🔗 आपका Referral Link:\n{ref_link}\nहर नए user पर 100 Coins!")
+    if text == "🧑‍🤝‍🧑 Invite":
+        ref = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+        return bot.send_message(user_id, f"🔗 आपका referral link:\n{ref}\nहर नए यूज़र पर *{REFERRAL_BONUS}* coins!")
 
-    elif text == "📤 Submit URL":
-        if coins < 1280:
-            bot.send_message(user_id, f"❌ आपके पास 1280 Coins नहीं हैं।")
+    if text == "📤 Submit URL":
+        if coins < SUBMIT_COST:
+            return bot.send_message(user_id, f"❌ आपके पास *{SUBMIT_COST}* coins नहीं हैं।")
+        msg = bot.send_message(user_id, f"📤 अपना लिंक भेजें (क़ीमत: {SUBMIT_COST} coins):")
+        return bot.register_next_step_handler(msg, handle_submit)
+
+    if text == "👨‍💻 Admin Panel" and user_id == ADMIN_ID:
+        cur.execute("SELECT COUNT(*), SUM(coins) FROM users")
+        total_users, total_coins = cur.fetchone()
+        cur.execute("SELECT id, user_id, url, status, submit_date FROM submits ORDER BY id DESC LIMIT 15")
+        rows = cur.fetchall()
+        if rows:
+            lines = [f"#{r[0]} | UID:{r[1]} | {r[2]} | {r[3]} | {r[4]}" for r in rows]
+            urls_block = "\n".join(lines)
         else:
-            msg = bot.send_message(user_id, "📤 अपना लिंक भेजें (1280 Coins में):")
-            bot.register_next_step_handler(msg, submit_url)
+            urls_block = "—"
+        report = (
+            "📊 *Admin Panel*\n\n"
+            f"👥 Total Users: *{(total_users or 0)}*\n"
+            f"💰 Total Coins (in DB): *{(total_coins or 0)}*\n\n"
+            f"📤 Recent Submits (max 15):\n{urls_block}"
+        )
+        return bot.send_message(user_id, report)
 
-    elif text == "👨‍💻 Admin Panel" and user_id == ADMIN_ID:
-        cursor.execute("SELECT COUNT(*), SUM(coins) FROM users")
-        total_users, total_coins = cursor.fetchone()
-        cursor.execute("SELECT url FROM urls")
-        urls = cursor.fetchall()
-        urls_text = "\n".join([u[0] for u in urls]) if urls else "❌ कोई URL नहीं"
-        report = f"""
-📊 *Admin Panel*  
+    # Fallback
+    bot.send_message(user_id, "❌ Invalid option. नीचे दिए गए buttons इस्तेमाल करें।")
 
-👥 Total Users: *{total_users or 0}*  
-💰 Total Coins Circulating: *{total_coins or 0}*  
-
-📤 Submitted URLs:  
-{urls_text}
-"""
-        bot.send_message(user_id, report, parse_mode="Markdown")
-
-def submit_url(message):
+def handle_submit(message):
     user_id = message.chat.id
-    url = message.text
-    add_coins(user_id, -1280)
-    add_url(user_id, url)
-    bot.send_message(user_id, f"✅ आपका लिंक submit हुआ: {url}")
-    bot.send_message(ADMIN_ID, f"🔔 नया URL:\n{url}\nUser ID: {user_id}")
+    url = (message.text or "").strip()
+    # deduct and save
+    add_coins(user_id, -SUBMIT_COST)
+    save_url(user_id, url)
+    bot.send_message(user_id, f"✅ आपका लिंक submit हुआ:\n{url}")
+    # notify admin
+    try:
+        bot.send_message(ADMIN_ID, f"🔔 नया URL submit:\n{url}\nUser ID: {user_id}")
+    except:
+        pass
 
-# ---------- RUN ----------
+# ---- Run 24/7 ----
 print("🤖 Bot is running 24/7...")
-bot.infinity_polling(timeout=60, long_polling_timeout=60)
+bot.infinity_polling(timeout=60, long_polling_timeout=60, allowed_updates=telebot.util.update_types)
