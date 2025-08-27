@@ -243,5 +243,5 @@ conn.close()
 ♾ Bot Run
 
 bot.infinity_polling()
-Ye bot ko 24/7 ran karvane ke liye kaya Karna ho ga
+
 
