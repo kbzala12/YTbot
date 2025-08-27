@@ -1,4 +1,3 @@
-K B zala:
 import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -12,7 +11,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-BOT_TOKEN = 7978191312:AAFyWVkBruuR42HTuTd_sQxFaKHBrre0VWw
+
+BOT_TOKEN = "7978191312:AAHxYcBrnJbQ_ccc_IR3xSHaNIprnrpuEs4
+
 ADMIN_ID =7459795138
 WEB_APP_URL = "https://0e8b2f63-6f1c-4921-9feb-42115ce5360f-00-2amqt62lj9glu.picard.replit.dev"
 GROUP_ID = @boomupbot10"  # Update with your group username
