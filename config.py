@@ -1,15 +1,11 @@
-import os
+# ==== CONFIG ====
+BOT_TOKEN = "7978191312:AAHxYcBrnJbQ_ccc_IR3xSHaNIprnrpuEs4"
+ADMIN_ID = 7459795138              # आपका Telegram numeric ID
+BOT_USERNAME = "Bingyt_bot"  # बिना @
+WEB_URL = "https://studiokbyt.onrender.com/"
+GROUP_URL = "https://t.me/boomupbot10"
 
-# ---------------- Bot Credentials ----------------
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "7978191312:AAHxYcBrnJbQ_ccc_IR3xSHaNIprnrpuEs4")  # Telegram Bot Token
-ADMIN_ID = int(os.environ.get("ADMIN_ID", 7459795138))  # Admin Telegram ID
-BOT_USERNAME = os.environ.get("BOT_USERNAME", "Bingyt_bot")  # Bot Username
-
-# ---------------- WebApp / Links ----------------
-WEB_URL = os.environ.get("WEB_URL", "https://studiokbyt.onrender.com/")  # Web App URL
-COMMUNITY_LINK = os.environ.get("COMMUNITY_LINK", "https://t.me/boomupbot10")  # Community/Group link
-
-# ---------------- Bot Config ----------------
-LINK_SUBMIT_COST = int(os.environ.get("LINK_SUBMIT_COST", 1280))  # Cost to submit URL
-REF_POINTS = int(os.environ.get("REF_POINTS", 100))               # Coins per new referral
-DAILY_BONUS = int(os.environ.get("DAILY_BONUS", 30))              # Daily bonus coins
+# ==== ECONOMY ====
+DAILY_CLAIM = 70
+REFERRAL_BONUS = 100
+SUBMIT_COST = 1280
