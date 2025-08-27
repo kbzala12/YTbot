@@ -12,4 +12,4 @@ COMMUNITY_LINK = os.environ.get("COMMUNITY_LINK", "https://t.me/boomupbot10")  #
 # ---------------- Bot Config ----------------
 LINK_SUBMIT_COST = int(os.environ.get("LINK_SUBMIT_COST", 1280))  # Cost to submit URL
 REF_POINTS = int(os.environ.get("REF_POINTS", 100))               # Coins per new referral
-DAILY_BONUS = int(os.environ.get("DAILY_BONUS", 30))              # Daily bonus coins
+DAILY_BONUS = int(os.environ.get("DAILY_BONUS", 50))              # Daily bonus coins
