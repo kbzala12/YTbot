@@ -1,15 +1,16 @@
 from flask import Flask
 from threading import Thread
 
-app = Flask('')
+app = Flask(__name__)
 
-@app.route('/')
+@app.get("/")
 def home():
-    return "Bot is Running ✅"
+    return "OK - Telegram bot alive"
 
 def run():
-    app.run(host='0.0.0.0', port=5000)
+    # 0.0.0.0 पर bind ताकि Render/Replit इसे पिंग कर सकें
+    app.run(host="0.0.0.0", port=5000)
 
 def keep_alive():
-    t = Thread(target=run)
+    t = Thread(target=run, daemon=True)
     t.start()
