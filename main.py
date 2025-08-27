@@ -32,10 +32,11 @@ def add_user(user_id, ref_id=None):
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users (user_id, coins, referrals) VALUES (?, ?, ?)", (user_id, 50, 0))
     conn.commit()
-    if ref_id:
+    if ref_id and ref_id != user_id:
+        # Referrer को 100 coins
         c.execute("UPDATE users SET coins = coins + 100, referrals = referrals + 1 WHERE user_id=?", (ref_id,))
         conn.commit()
-        bot.send_message(ref_id, f"🎉 आपको रेफ़रल से 100 कॉइन मिले! नया यूज़र जुड़ा।")
+        bot.send_message(ref_id, f"🎉 आपके referral से नया यूज़र जुड़ा! आपको 100 कॉइन मिले।")
     conn.close()
 
 def get_coins(user_id):
@@ -53,6 +54,14 @@ def update_coins(user_id, amount):
     conn.commit()
     conn.close()
 
+def get_total_users():
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT user_id, coins, referrals FROM users")
+    users = c.fetchall()
+    conn.close()
+    return users
+
 # ---------------- Start Command ----------------
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -61,33 +70,56 @@ def start(message):
     user_id = message.chat.id
     add_user(user_id, ref_id)
 
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("🌐 Open WebApp", url=WEB_URL))
-    keyboard.add(types.InlineKeyboardButton("📢 Join Group", url="https://t.me/boomupbot10"))
-    keyboard.add(types.InlineKeyboardButton("🎁 Invite Friends", url=f"https://t.me/{bot.get_me().username}?start={user_id}"))
+    inline_kb = types.InlineKeyboardMarkup()
+    inline_kb.add(types.InlineKeyboardButton("🌐 Open WebApp", url=WEB_URL))
+    inline_kb.add(types.InlineKeyboardButton("📢 Join Group", url="https://t.me/boomupbot10"))
+    inline_kb.add(types.InlineKeyboardButton("🎁 Invite Friends", url=f"https://t.me/{bot.get_me().username}?start={user_id}"))
 
     bot.send_message(user_id,
         f"👋 स्वागत है {message.from_user.first_name}!\n"
         f"💰 आपका बैलेंस: {get_coins(user_id)} कॉइन\n\n"
         "नीचे बटन से WebApp खोलें और ग्रुप जॉइन करें:",
-        reply_markup=keyboard
+        reply_markup=inline_kb
     )
 
-# ---------------- Check Balance ----------------
-@bot.message_handler(commands=['balance'])
-def balance(message):
-    coins = get_coins(message.chat.id)
-    bot.send_message(message.chat.id, f"💰 आपके पास {coins} कॉइन हैं।")
+    # User Keyboard
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    menu.row("📊 Profile", "💰 Wallet")
+    menu.row("📤 Submit URL", "📢 Subscribe")
+    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
-# ---------------- Submit URL ----------------
-@bot.message_handler(commands=['submit'])
+    # Admin Keyboard
+    if user_id == ADMIN_ID:
+        admin_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        admin_menu.row("✅ Approve", "❌ Reject")
+        admin_menu.row("📊 Total Users")
+        bot.send_message(user_id, "⚙️ Admin Panel:", reply_markup=admin_menu)
+
+# ---------------- Profile ----------------
+@bot.message_handler(func=lambda m: m.text == "📊 Profile")
+def profile(message):
+    coins = get_coins(message.chat.id)
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT referrals FROM users WHERE user_id=?", (message.chat.id,))
+    ref = c.fetchone()[0]
+    conn.close()
+    bot.send_message(message.chat.id, f"👤 Coins: {coins}\n👥 Referrals: {ref}")
+
+# ---------------- Wallet ----------------
+@bot.message_handler(func=lambda m: m.text == "💰 Wallet")
+def wallet(message):
+    coins = get_coins(message.chat.id)
+    bot.send_message(message.chat.id, f"💵 आपके Wallet में {coins} कॉइन हैं।")
+
+# ---------------- URL Submit ----------------
+@bot.message_handler(func=lambda m: m.text == "📤 Submit URL")
 def submit(message):
-    user_id = message.chat.id
-    coins = get_coins(user_id)
+    coins = get_coins(message.chat.id)
     if coins < 1280:
-        bot.send_message(user_id, "⚠️ पर्याप्त कॉइन नहीं हैं (1280 चाहिए)।")
+        bot.send_message(message.chat.id, "⚠️ पर्याप्त कॉइन नहीं हैं (1280 चाहिए)।")
         return
-    msg = bot.send_message(user_id, "🔗 अपना YouTube URL भेजें:")
+    msg = bot.send_message(message.chat.id, "🔗 अपना YouTube URL भेजें:")
     bot.register_next_step_handler(msg, process_url)
 
 def process_url(message):
@@ -106,45 +138,14 @@ def process_url(message):
     else:
         bot.send_message(user_id, "⚠️ पर्याप्त कॉइन नहीं हैं।")
 
-# ---------------- Admin Panel ----------------
-@bot.message_handler(commands=['admin'])
-def admin_panel(message):
-    if message.chat.id != ADMIN_ID:
-        bot.send_message(message.chat.id, "⛔ सिर्फ़ Admin के लिए।")
-        return
-    bot.send_message(message.chat.id, "⚙️ Admin Panel:\n/approve <id>\n/reject <id>")
-
-@bot.message_handler(commands=['approve'])
-def approve(message):
-    if message.chat.id != ADMIN_ID:
-        return
-    args = message.text.split()
-    if len(args) < 2:
-        bot.send_message(message.chat.id, "ID दे।")
-        return
-    sub_id = int(args[1])
-    conn = sqlite3.connect("bot.db")
-    c = conn.cursor()
-    c.execute("UPDATE submissions SET status='approved' WHERE id=?", (sub_id,))
-    conn.commit()
-    conn.close()
-    bot.send_message(message.chat.id, f"✅ Submission {sub_id} approved.")
-
-@bot.message_handler(commands=['reject'])
-def reject(message):
-    if message.chat.id != ADMIN_ID:
-        return
-    args = message.text.split()
-    if len(args) < 2:
-        bot.send_message(message.chat.id, "ID दे।")
-        return
-    sub_id = int(args[1])
-    conn = sqlite3.connect("bot.db")
-    c = conn.cursor()
-    c.execute("UPDATE submissions SET status='rejected' WHERE id=?", (sub_id,))
-    conn.commit()
-    conn.close()
-    bot.send_message(message.chat.id, f"❌ Submission {sub_id} rejected.")
+# ---------------- Admin Commands ----------------
+@bot.message_handler(func=lambda m: m.text == "📊 Total Users" and m.chat.id == ADMIN_ID)
+def total_users(message):
+    users = get_total_users()
+    text = f"📊 Total Users: {len(users)}\n\n"
+    for u in users:
+        text += f"User: {u[0]} | Coins: {u[1]} | Referrals: {u[2]}\n"
+    bot.send_message(message.chat.id, text)
 
 # ---------------- Run Bot ----------------
 keep_alive()
