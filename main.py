@@ -70,6 +70,7 @@ def start(message):
     user_id = message.chat.id
     add_user(user_id, ref_id)
 
+    # Inline buttons
     inline_kb = types.InlineKeyboardMarkup()
     inline_kb.add(types.InlineKeyboardButton("🌐 Open WebApp", url=WEB_URL))
     inline_kb.add(types.InlineKeyboardButton("📢 Join Group", url="https://t.me/boomupbot10"))
@@ -78,7 +79,8 @@ def start(message):
     bot.send_message(user_id,
         f"👋 स्वागत है {message.from_user.first_name}!\n"
         f"💰 आपका बैलेंस: {get_coins(user_id)} कॉइन\n\n"
-        "नीचे बटन से WebApp खोलें और ग्रुप जॉइन करें:",
+        "नीचे बटन से WebApp खोलें और ग्रुप जॉइन करें:\n\n"
+        f"🔗 आपका Referral Link:\nhttps://t.me/{bot.get_me().username}?start={user_id}",
         reply_markup=inline_kb
     )
 
@@ -86,14 +88,9 @@ def start(message):
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.row("📊 Profile", "💰 Wallet")
     menu.row("📤 Submit URL", "📢 Subscribe")
-    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
-
-    # Admin Keyboard
     if user_id == ADMIN_ID:
-        admin_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        admin_menu.row("✅ Approve", "❌ Reject")
-        admin_menu.row("📊 Total Users")
-        bot.send_message(user_id, "⚙️ Admin Panel:", reply_markup=admin_menu)
+        menu.row("📊 Total Users", "⚙️ Admin Panel")
+    bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
 # ---------------- Profile ----------------
 @bot.message_handler(func=lambda m: m.text == "📊 Profile")
@@ -146,6 +143,13 @@ def total_users(message):
     for u in users:
         text += f"User: {u[0]} | Coins: {u[1]} | Referrals: {u[2]}\n"
     bot.send_message(message.chat.id, text)
+
+@bot.message_handler(func=lambda m: m.text == "⚙️ Admin Panel" and m.chat.id == ADMIN_ID)
+def admin_panel(message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.row("✅ Approve", "❌ Reject")
+    keyboard.row("📊 Total Users")
+    bot.send_message(message.chat.id, "⚙️ Admin Panel Ready", reply_markup=keyboard)
 
 # ---------------- Run Bot ----------------
 keep_alive()
