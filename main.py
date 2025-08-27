@@ -88,8 +88,7 @@ def start(message):
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.row("📊 Profile", "💰 Wallet")
     menu.row("📤 Submit URL", "📢 Subscribe")
-    if user_id == ADMIN_ID:
-        menu.row("📊 Total Users", "⚙️ Admin Panel")
+    menu.row("🎁 Invite Friends")  # Invite button added
     bot.send_message(user_id, "👇 नीचे दिए गए बटन से आगे बढ़ें:", reply_markup=menu)
 
 # ---------------- Profile ----------------
@@ -136,6 +135,17 @@ def process_url(message):
         bot.send_message(user_id, "⚠️ पर्याप्त कॉइन नहीं हैं।")
 
 # ---------------- Admin Commands ----------------
+@bot.message_handler(commands=['admin'])
+def admin_panel(message):
+    if message.chat.id != ADMIN_ID:
+        bot.send_message(message.chat.id, "⛔ सिर्फ़ Admin के लिए।")
+        return
+    # Admin Keyboard
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.row("✅ Approve", "❌ Reject")
+    keyboard.row("📊 Total Users")
+    bot.send_message(message.chat.id, "⚙️ Admin Panel Ready", reply_markup=keyboard)
+
 @bot.message_handler(func=lambda m: m.text == "📊 Total Users" and m.chat.id == ADMIN_ID)
 def total_users(message):
     users = get_total_users()
@@ -143,13 +153,6 @@ def total_users(message):
     for u in users:
         text += f"User: {u[0]} | Coins: {u[1]} | Referrals: {u[2]}\n"
     bot.send_message(message.chat.id, text)
-
-@bot.message_handler(func=lambda m: m.text == "⚙️ Admin Panel" and m.chat.id == ADMIN_ID)
-def admin_panel(message):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.row("✅ Approve", "❌ Reject")
-    keyboard.row("📊 Total Users")
-    bot.send_message(message.chat.id, "⚙️ Admin Panel Ready", reply_markup=keyboard)
 
 # ---------------- Run Bot ----------------
 keep_alive()
