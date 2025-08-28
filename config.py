@@ -6,7 +6,7 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", 7459795138))  # Admin Telegram ID
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "Bingyt_bot")  # Bot Username
 
 # ---------------- WebApp / Links ----------------
-WEB_URL = os.environ.get("WEB_URL", "https://studiokbyt.onrender.com/")  # Web App URL
+WEB_URL = os.environ.get("WEB_URL", "https://yt2026ab.onrender.com/")  # Web App URL
 COMMUNITY_LINK = os.environ.get("COMMUNITY_LINK", "https://t.me/boomupbot10")  # Community/Group link
 
 # ---------------- Bot Config ----------------
