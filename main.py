@@ -1,9 +1,26 @@
+# mani.py
 import telebot
 from telebot import types
 import sqlite3
+from threading import Thread
+from flask import Flask
 from config import *
-from keep_alive import keep_alive
 
+app = Flask("")
+
+# ---------------- Keep Alive ----------------
+@app.route("/")
+def home():
+    return "Bot is running 24/7 ✅"
+
+def run():
+    app.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# ---------------- Bot Setup ----------------
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # ---------------- Database ----------------
@@ -61,26 +78,44 @@ def get_total_users():
     conn.close()
     return users
 
+# ---------------- Force Join ----------------
+def is_member(user_id):
+    try:
+        member = bot.get_chat_member("boomupbot10", user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
+
 # ---------------- Start Command ----------------
 @bot.message_handler(commands=['start'])
 def start(message):
+    user_id = message.chat.id
     args = message.text.split()
     ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
-    user_id = message.chat.id
+
+    if not is_member(user_id):
+        join_btn = types.InlineKeyboardMarkup()
+        join_btn.add(types.InlineKeyboardButton("📢 Join Group", url="https://t.me/boomupbot10"))
+        bot.send_message(user_id,
+            "⚠️ पहले हमारे Group को Join करें!\n\n"
+            "✅ Join करने के बाद /start दबाएँ।",
+            reply_markup=join_btn
+        )
+        return
+
     add_user(user_id, ref_id)
 
-    # Inline buttons
+    # WebApp Button
     inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🌐 Open WebApp", url=WEB_URL))
-    inline_kb.add(types.InlineKeyboardButton("📢 Join Group", url="https://t.me/boomupbot10"))
-    inline_kb.add(types.InlineKeyboardButton("🎁 Invite Friends", url=f"https://t.me/{bot.get_me().username}?start={user_id}"))
+    inline_kb.add(types.InlineKeyboardButton("🌐 Open WebApp", web_app=types.WebAppInfo(url=WEB_URL)))
 
-    bot.send_message(user_id,
+    bot.send_message(
+        user_id,
         "😊 Welcome!\n\n"
         "🎬 Video Dekho 🔥 Coin Kamvo\n"
         "💰 Apna YouTube Channel Monetization Karvao ✅\n\n"
         f"💰 आपका बैलेंस: {get_coins(user_id)} कॉइन\n\n"
-        "👇 नीचे बटन से WebApp खोलें और ग्रुप जॉइन करें:\n\n"
+        "👇 नीचे बटन से WebApp खोलें:\n\n"
         f"🔗 आपका Referral Link:\nhttps://t.me/{bot.get_me().username}?start={user_id}",
         reply_markup=inline_kb
     )
@@ -115,7 +150,7 @@ def wallet(message):
 def subscribe(message):
     bot.send_message(message.chat.id, "📺 हमारे VIP YouTube चैनल को Subscribe करें:\n👉 https://youtube.com/@kishorsinhzala.?si=7Hmmk0GlISdW9VsF")
 
-# ---------------- URL Submit ----------------
+# ---------------- Submit URL ----------------
 @bot.message_handler(func=lambda m: m.text == "📤 Submit URL")
 def submit(message):
     coins = get_coins(message.chat.id)
