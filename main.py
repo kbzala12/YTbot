@@ -78,13 +78,17 @@ def get_total_users():
     conn.close()
     return users
 
-# ---------------- Force Join ----------------
-def is_member(user_id):
+# ---------------- Auto Start After Join ----------------
+@bot.my_chat_member_handler()
+def auto_start_after_join(update):
     try:
-        member = bot.get_chat_member("boomupbot10", user_id)
-        return member.status in ["member", "administrator", "creator"]
+        user_id = update.from_user.id
+        # Check if user just joined the group
+        if update.new_chat_member.status in ["member", "administrator", "creator"]:
+            # Call start logic directly
+            start(types.Message(chat=types.Chat(id=user_id, type="private"), text=f"/start"))
     except:
-        return False
+        pass
 
 # ---------------- Start Command ----------------
 @bot.message_handler(commands=['start'])
@@ -92,16 +96,6 @@ def start(message):
     user_id = message.chat.id
     args = message.text.split()
     ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
-
-    if not is_member(user_id):
-        join_btn = types.InlineKeyboardMarkup()
-        join_btn.add(types.InlineKeyboardButton("📢 Join Group", url="https://t.me/boomupbot10"))
-        bot.send_message(user_id,
-            "⚠️ पहले हमारे Group को Join करें!\n\n"
-            "✅ Join करने के बाद /start दबाएँ।",
-            reply_markup=join_btn
-        )
-        return
 
     add_user(user_id, ref_id)
 
