@@ -33,7 +33,6 @@ def add_user(user_id, ref_id=None):
     c.execute("INSERT OR IGNORE INTO users (user_id, coins, referrals) VALUES (?, ?, ?)", (user_id, 50, 0))
     conn.commit()
     if ref_id and ref_id != user_id:
-        # Referrer को 100 coins
         c.execute("UPDATE users SET coins = coins + 100, referrals = referrals + 1 WHERE user_id=?", (ref_id,))
         conn.commit()
         bot.send_message(ref_id, f"🎉 आपके referral से नया यूज़र जुड़ा! आपको 100 कॉइन मिले।")
@@ -77,9 +76,11 @@ def start(message):
     inline_kb.add(types.InlineKeyboardButton("🎁 Invite Friends", url=f"https://t.me/{bot.get_me().username}?start={user_id}"))
 
     bot.send_message(user_id,
-        f"👋 स्वागत है {message.from_user.first_name}!\n"
+        "😊 Welcome!\n\n"
+        "🎬 Video Dekho 🔥 Coin Kamvo\n"
+        "💰 Apna YouTube Channel Monetization Karvao ✅\n\n"
         f"💰 आपका बैलेंस: {get_coins(user_id)} कॉइन\n\n"
-        "नीचे बटन से WebApp खोलें और ग्रुप जॉइन करें:\n\n"
+        "👇 नीचे बटन से WebApp खोलें और ग्रुप जॉइन करें:\n\n"
         f"🔗 आपका Referral Link:\nhttps://t.me/{bot.get_me().username}?start={user_id}",
         reply_markup=inline_kb
     )
@@ -108,6 +109,11 @@ def profile(message):
 def wallet(message):
     coins = get_coins(message.chat.id)
     bot.send_message(message.chat.id, f"💵 आपके Wallet में {coins} कॉइन हैं।")
+
+# ---------------- Subscribe ----------------
+@bot.message_handler(func=lambda m: m.text == "📢 Subscribe")
+def subscribe(message):
+    bot.send_message(message.chat.id, "📺 हमारे VIP YouTube चैनल को Subscribe करें:\n👉 https://youtube.com/@kishorsinhzala.?si=7Hmmk0GlISdW9VsF")
 
 # ---------------- URL Submit ----------------
 @bot.message_handler(func=lambda m: m.text == "📤 Submit URL")
